@@ -4,3 +4,6 @@
 [submodule "vendor/wil"]
 	path = vendor/wil
 	url = https://github.com/microsoft/wil
+[submodule "vendor/EASTL"]
+	path = vendor/EASTL
+	url = https://github.com/electronicarts/EASTL
