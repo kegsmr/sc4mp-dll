@@ -1,3 +1,9 @@
 [submodule "vendor/gzcom-dll"]
 	path = vendor/gzcom-dll
 	url = https://github.com/nsgomez/gzcom-dll.git
+[submodule "vendor/EASTL"]
+	path = vendor/EASTL
+	url = https://github.com/electronicarts/EASTL
+[submodule "vendor/EABase"]
+	path = vendor/EABase
+	url = https://github.com/electronicarts/EABase
