@@ -16,7 +16,7 @@ static constexpr uint32_t kSC4MessageCityEstablished = 0x26D31EC4;
 
 // This must be unique for every plugin. Generate a 32-bit random number and use it.
 // DO NOT REUSE DIRECTOR IDS EVER.
-static constexpr uint32_t kExampleDirectorID = <>;
+static constexpr uint32_t kExampleDirectorID = 0x51ACC690;
 
 // An example DLL director that logs a message to the debug console when a city is
 // loaded or established.
