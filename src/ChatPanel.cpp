@@ -156,20 +156,21 @@ static std::vector<std::wstring> Wrap(const std::wstring& text)
 }
 
 // Estimates how wide text is in the chat lines' font. The pinned gzcom-dll has no way to ask the game's font (cIGZFont),
-// so this uses rough widths of a sans-serif font at that size, erring wide so a message doesn't run into the name before it.
+// so this uses widths of the chat lines' font (DataInsetLegend) measured in game, rounded up a little so a message
+// doesn't run into the name before it. Eg. "Keg (1):" is about 27 pixels wide in game, and 32 here.
 static int32_t EstimateWidth(const std::wstring& text)
 {
 	int32_t width = 0;
 
 	for (wchar_t c : text)
 	{
-		if (wcschr(L"ijl.,:;'!|", c))
+		if (wcschr(L"ijl.,:;'!| ", c))
+		{
+			width += 2;
+		}
+		else if (wcschr(L"ftr()[]-I", c))
 		{
 			width += 3;
-		}
-		else if (wcschr(L"ftrI -()[]", c))
-		{
-			width += 4;
 		}
 		else if (wcschr(L"mwMW@", c))
 		{
@@ -177,11 +178,15 @@ static int32_t EstimateWidth(const std::wstring& text)
 		}
 		else if (c >= L'A' && c <= L'Z')
 		{
-			width += 8;
+			width += 6;
+		}
+		else if (c >= L'0' && c <= L'9')
+		{
+			width += 6;
 		}
 		else if (c < 0x2E80)
 		{
-			width += 7;
+			width += 5;
 		}
 		else
 		{
