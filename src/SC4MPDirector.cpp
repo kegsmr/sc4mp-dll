@@ -111,7 +111,7 @@ public:
 		}
 
 		// The bridge thread only queues the lines; the panel shows them on the game thread
-		bridge.SetNotifyHandler([this](const std::string& text, bool history, const std::string& name, const std::string& color) { chat.Post(text, history, name, color); });
+		bridge.SetNotifyHandler([this](const std::string& text, bool history, const std::string& name, const std::string& color, bool own) { chat.Post(text, history, name, color, own); });
 		bridge.SetStatusHandler([this](const std::string& state, const std::string& text) { chat.PostStatus(state, text); });
 		bridge.SetServerHandler([this](const std::string& name) { chat.PostServerName(name); });
 		bridge.SetGuardHandler([this](const std::string& owner, const std::string& city, const std::string& path) { guard.Post(owner, city, path); });

@@ -286,7 +286,7 @@ void Bridge::HandleLine(const std::string& line)
 
 		if (notifyHandler)
 		{
-			notifyHandler(text, message["history"] == "true", message["name"], message["color"]);
+			notifyHandler(text, message["history"] == "true", message["name"], message["color"], message["self"] == "true");	// "self": the player's own message
 		}
 	}
 	else if (type == "alert")
@@ -296,7 +296,7 @@ void Bridge::HandleLine(const std::string& line)
 		// Also kept in the chat panel, since the message box goes away
 		if (notifyHandler)
 		{
-			notifyHandler(text, false, std::string(), std::string());
+			notifyHandler(text, false, std::string(), std::string(), false);
 		}
 
 		// Shown on its own thread, so neither the game nor the bridge waits for the player to close it

@@ -45,6 +45,9 @@ static constexpr uint32_t kMinimizeButtonID = 0x7B3E9A6A;
 static constexpr uint32_t kStatusTipID = 0x7B3E9A90;	// a see-through button over the status icon, for its tooltip
 
 // The minimized panel, a button in the corner with the status icon and unread count on it
+static constexpr uint32_t kScrollbarID = 0x7B3E9A6B;
+static constexpr uint32_t kNewHintID = 0x7B3E9A6C;		// "N new below", while the player has scrolled up
+static constexpr uint32_t kNewHintTextID = 0x7B3E9A6D;
 static constexpr uint32_t kChipID = 0x7B3E9AA0;	// the round button, under the status ring and the speech bubble
 static constexpr uint32_t kChipCountID = 0x7B3E9AA1;	// the unread count, on the red bubble
 static constexpr uint32_t kChipCountBubbleID = 0x7B3E9AA9;
@@ -101,9 +104,6 @@ static constexpr size_t kLineCount = 8;
 static constexpr size_t kMaxLines = 200;			// rows kept to scroll back through, wrapped rows included
 static constexpr int kWheelRows = 3;				// rows scrolled per notch of the mouse wheel
 static constexpr int32_t kScrollArrowSize = 16;		// the game's scrollbar's arrows, at each end
-static constexpr uint32_t kScrollbarID = 0x7B3E9A6B;
-static constexpr uint32_t kNewHintID = 0x7B3E9A6C;		// "N new below", while the player has scrolled up
-static constexpr uint32_t kNewHintTextID = 0x7B3E9A6D;
 static constexpr size_t kLineLength = 44;			// characters that fit on a line, roughly, since the font isn't monospaced
 static constexpr int32_t kInputWidth = 276;			// the input's text window, less its gutters; the end of a longer message is shown while typing it
 static constexpr size_t kMaxInputLength = 200;
@@ -392,11 +392,11 @@ void ChatPanel::StartTyping()
 	ShowInput();
 }
 
-void ChatPanel::Post(const std::string& text, bool history, const std::string& name, const std::string& color)
+void ChatPanel::Post(const std::string& text, bool history, const std::string& name, const std::string& color, bool own)
 {
 	std::lock_guard<std::mutex> lock(inboxMutex);
 
-	inbox.push_back(Notice{ text, history, name, color });
+	inbox.push_back(Notice{ text, history, name, color, own });
 	while (inbox.size() > kMaxInbox)
 	{
 		inbox.pop_front();
@@ -1246,6 +1246,10 @@ void ChatPanel::AddLine(const Notice& notice)
 				if (first && chat && color >= 0 && shown.text.compare(0, namePrefix.size(), namePrefix) == 0)
 				{
 					shown.name = Shorten(notice.name, kNameLength);
+					if (notice.own)
+					{
+						shown.name += " (You)";	// after shortening, so a long name can't cut it off
+					}
 					shown.color = color;
 					shown.text = Trim(shown.text.substr(namePrefix.size()));
 				}

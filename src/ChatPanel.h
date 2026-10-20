@@ -43,7 +43,7 @@ public:
 
 	// Adds a line from the launcher. Safe to call from any thread. History lines (sent on connecting) don't count as unread.
 	// Chat comes with the player's name, which starts the text, and the launcher's color for it (eg. "[46,125,50]"). Other lines are shown in grey.
-	void Post(const std::string& text, bool history, const std::string& name = std::string(), const std::string& color = std::string());
+	void Post(const std::string& text, bool history, const std::string& name = std::string(), const std::string& color = std::string(), bool own = false);
 
 	// Shows the launcher's save status (eg. "saved", with "Saved 13:01") and the server's name as the title. Safe to call from any thread.
 	void PostStatus(const std::string& state, const std::string& text);
@@ -86,6 +86,7 @@ private:
 		bool history = false;
 		std::string name;
 		std::string color;
+		bool own = false;	// the player's own message, whose name gets " (You)"
 	};
 
 	// A line as shown, already wrapped to fit. The first line of a chat message has the player's name, shown before the text in its color.
