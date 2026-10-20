@@ -21,6 +21,7 @@
     <ClCompile Include="..\vendor\EASTL\source\string.cpp" />
     <ClCompile Include="..\vendor\EASTL\source\thread_support.cpp" />
     <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\cRZBaseString.cpp" />
+    <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\cRZBaseSystemService.cpp" />
     <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\cRZBaseVariant.cpp" />
     <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\cRZCOMDllDirector.cpp" />
     <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\cRZMessage2.cpp" />
@@ -32,6 +33,7 @@
     <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\SCPropertyUtil.cpp" />
     <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\StringResourceManager.cpp" />
     <ClCompile Include="Bridge.cpp" />
+    <ClCompile Include="ChatPanel.cpp" />
     <ClCompile Include="DebugUtil.cpp" />
     <ClCompile Include="Json.cpp" />
     <ClCompile Include="Log.cpp" />
@@ -56,7 +58,9 @@
     <ClInclude Include="..\vendor\gzcom-dll\gzcom-dll\include\StringResourceKey.h" />
     <ClInclude Include="..\vendor\gzcom-dll\gzcom-dll\include\StringResourceManager.h" />
     <ClInclude Include="Bridge.h" />
+    <ClInclude Include="ChatPanel.h" />
     <ClInclude Include="DebugUtil.h" />
+    <ClInclude Include="GZWinInterfaces.h" />
     <ClInclude Include="Json.h" />
     <ClInclude Include="Log.h" />
     <ClInclude Include="Text.h" />

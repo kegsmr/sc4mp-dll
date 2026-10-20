@@ -21,7 +21,13 @@ jobs:
       - name: Build
         run: msbuild src/SC4MP.sln /p:Configuration=Release /p:Platform=x86 /p:PostBuildEventUseInBuild=false /m
 
+      # The chat panel's UI script goes in the Plugins folder with the DLL
+      - name: Pack the UI
+        run: python tools/make-ui-dat.py src/Release/sc4mp-dll-ui.dat
+
       - uses: actions/upload-artifact@v4
         with:
           name: sc4mp-dll
-          path: src/Release/*.dll
+          path: |
+            src/Release/*.dll
+            src/Release/sc4mp-dll-ui.dat

@@ -55,3 +55,22 @@ std::wstring Text::Utf8ToWide(const std::string& text)
 
 	return wide;
 }
+
+std::string Text::WideToUtf8(const std::wstring& text)
+{
+	if (text.empty())
+	{
+		return std::string();
+	}
+
+	int length = WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
+	if (length <= 0)
+	{
+		return std::string();
+	}
+
+	std::string utf8(length, '\0');
+	WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), utf8.data(), length, nullptr, nullptr);
+
+	return utf8;
+}

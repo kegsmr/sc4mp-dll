@@ -74,6 +74,11 @@ bool Bridge::IsEnabled() const
 	return port != 0;
 }
 
+void Bridge::SetNotifyHandler(NotifyHandler handler)
+{
+	notifyHandler = std::move(handler);
+}
+
 void Bridge::Send(JsonWriter message)
 {
 	if (!IsEnabled())
@@ -256,12 +261,23 @@ void Bridge::HandleLine(const std::string& line)
 
 	if (type == "notify")
 	{
-		// Chat and save results. The launcher's overlay already shows these, so they're only logged for now
+		// Chat and save results, shown in the chat panel
 		Log::Line("Launcher: " + text);
+
+		if (notifyHandler)
+		{
+			notifyHandler(text, message["history"] == "true");
+		}
 	}
 	else if (type == "alert")
 	{
 		Log::Line("Launcher (alert): " + text);
+
+		// Also kept in the chat panel, since the message box goes away
+		if (notifyHandler)
+		{
+			notifyHandler(text, false);
+		}
 
 		// Shown on its own thread, so neither the game nor the bridge waits for the player to close it
 		std::wstring wideText = Text::Utf8ToWide(text);
