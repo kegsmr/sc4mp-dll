@@ -580,7 +580,12 @@ bool ChatPanel::IsOnPanel(int32_t x, int32_t y)
 
 	// Another of the game's windows may be over the panel, eg. a query window dragged there, and it keeps its clicks.
 	// If the window manager can't say, the panel takes the click.
-	cIGZWin* pHit = pWinMgr ? pWinMgr->GetWindowFromPoint(x, y) : nullptr;
+	cIGZWin* pHit = nullptr;
+	if (pWinMgr)
+	{
+		pHit = pWinMgr->GetWindowFromPoint(x, y);
+	}
+
 	if (!pHit)
 	{
 		return true;
