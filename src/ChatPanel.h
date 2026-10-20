@@ -22,6 +22,7 @@ class cIGZWin;
 // Only Post() may be called from another thread: it queues the line, and the queue is emptied every
 // frame on the game thread (OnTick), since the game's windows must only be used there.
 // Keys come from the game window's own Win32 messages (FilterMessage), which also run on the game thread.
+// So do the mouse buttons on the panel, so the map under it doesn't also get them.
 class ChatPanel final : public cRZBaseSystemService, private cIGZWinProc, private cIGZWinProcFilterW32
 {
 public:
@@ -60,6 +61,11 @@ private:
 	bool DoWinMsg(cIGZWin* pWin, uint32_t dwMessageID, uint32_t data1, uint32_t data2, uint32_t data3) override;
 	LRESULT FilterMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, bool& handled) override;
 
+	bool Click(uint32_t buttonID);
+	bool HandleMouse(HWND hWnd, UINT uMsg, LPARAM lParam);
+	bool IsOnPanel(int32_t x, int32_t y);
+	void GetPanelOrigin(int32_t& left, int32_t& top) const;
+	uint32_t GetButtonAt(int32_t x, int32_t y) const;
 	bool HandleTypingKey(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 	void Type(wchar_t c);
 	void Paste(HWND hWnd);
@@ -95,6 +101,8 @@ private:
 	int32_t openHeight = 0;
 	int32_t parentWidth = 0;	// the view's size when the panel was last placed in its corner
 	int32_t parentHeight = 0;
+	uint32_t buttonsDown = 0;	// the mouse buttons (MK_LBUTTON, etc.) pressed on the panel, whose release is kept from the game too
+	bool loggedCoveredClick = false;
 
 	std::mutex inboxMutex;
 	std::deque<std::pair<std::string, bool>> inbox;	// lines from the bridge thread, waiting for the next frame
