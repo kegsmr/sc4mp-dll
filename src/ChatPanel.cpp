@@ -63,6 +63,8 @@ static constexpr int32_t kRegionTop = 66;			// below the region view's top bar a
 static constexpr int32_t kCityTop = 16;
 static constexpr int32_t kChipBottomMargin = 48;	// above the city view's news ticker, if the chip is moved to the bottom
 static constexpr ULONGLONG kChipCheckInterval = 250;	// how often the chip checks whether a window of the game covers it
+static constexpr uint32_t kSavedDialogID = 0xAA8DEF97;	// the game's "City Saved." message box
+static constexpr uint32_t kSavedDialogTextID = 0x4A8CC4A9;	// and its text
 static constexpr ULONGLONG kSavedDialogWait = 6000;	// how long after a save the game's "City Saved." is looked for
 static constexpr int32_t kSavedDialogScanTop = 120;	// the middle of the game is searched from this far from its top to as far from its bottom
 static constexpr int32_t kSavedDialogScanStep = 20;
@@ -1030,14 +1032,9 @@ static void GetWindowOrigin(cIGZWin* pWindow, int32_t& left, int32_t& top)
 void ChatPanel::HideSavedDialog()
 {
 	savedDialogDeadline = GetTickCount64() + kSavedDialogWait;
-	savedDialogTicks = 0;
-	savedDialogMessages = 0;
-	savedDialogFindings.clear();
-	Log::Line("Looking for the game's City Saved dialog for " + std::to_string(kSavedDialogWait / 1000) + " seconds");
 }
 
-// Looks for the game's "City Saved." until the time's up. Called every frame, and from the game window's messages,
-// since frames may not come while the game's message box is up.
+// Looks for the game's "City Saved." until the time's up. Called every frame, and from the game window's messages.
 void ChatPanel::CheckSavedDialog(bool fromMessage)
 {
 	if (!savedDialogDeadline)
@@ -1049,102 +1046,54 @@ void ChatPanel::CheckSavedDialog(bool fromMessage)
 	if (now > savedDialogDeadline)
 	{
 		savedDialogDeadline = 0;
-		Log::Line("Stopped looking for the game's City Saved dialog (checked " + std::to_string(savedDialogTicks) + " times on frames and " + std::to_string(savedDialogMessages) + " on messages)");
 		return;
 	}
 
 	// The game window gets many messages, so they only check every so often
-	if (fromMessage)
+	if (fromMessage && now - lastSavedDialogCheck < kSavedDialogInterval)
 	{
-		if (now - lastSavedDialogCheck < kSavedDialogInterval)
-		{
-			return;
-		}
-		savedDialogMessages++;
-	}
-	else
-	{
-		savedDialogTicks++;
+		return;
 	}
 	lastSavedDialogCheck = now;
 
 	CloseSavedDialog();
 }
 
-// Logs something learnt while looking for the game's "City Saved.", once each, to find out how it can be found
-void ChatPanel::LogSavedDialogFinding(const std::string& text)
-{
-	for (const std::string& logged : savedDialogFindings)
-	{
-		if (logged == text)
-		{
-			return;
-		}
-	}
-	if (savedDialogFindings.size() >= 40)
-	{
-		return;
-	}
-
-	savedDialogFindings.push_back(text);
-	Log::Line("City Saved dialog search: " + text);
-}
-
-// Closes the game's "City Saved." message box, if it's up. It's found down the middle of the game while it's modal, and its
-// texts (found at points across it, since the pinned gzcom-dll can't list a window's children) must have "City Saved"
-// and an "OK" button, which is then clicked like the player would, so the game closes it and ends its modal state itself.
-// If no captions can be read, a message box sized like it with a single button is taken instead.
+// Closes the game's "City Saved." message box, if it's up. While the game is modal, it's looked for down the middle of
+// the game (it's above the centre) and known by its ID, or else by its text, or else by its shape if no text can be
+// read. Its OK button (found at points across it, since the pinned gzcom-dll can't list a window's children) is then
+// clicked like the player would, so the game closes it and ends its modal state itself.
 void ChatPanel::CloseSavedDialog()
 {
 	cIGZWinMgrPtr pWinMgr;
-	if (!pWinMgr || !gameWindow)
+	if (!pWinMgr || !gameWindow || !pWinMgr->IsModal())
 	{
-		return;
-	}
-
-	bool modal = pWinMgr->IsModal();
-	LogSavedDialogFinding("modal " + std::to_string(modal));
-	if (!modal)
-	{
-		return;	// not up yet
+		return;	// not up (yet)
 	}
 
 	cIGZWin* pMain = pWinMgr->GetMainWindow();
 	if (!pMain)
 	{
-		LogSavedDialogFinding("no main window");
 		return;
 	}
 	int32_t width = pMain->GetW();
 	int32_t height = pMain->GetH();
 
-	// Down the middle of the game (the box is above its centre), the first window smaller than the game: from there
-	// up, the outermost one that's smaller is the dialog
+	// Down the middle, the first window smaller than the game: from there up, the outermost one that's smaller is the dialog
 	cIGZWin* pDialog = nullptr;
 	for (int32_t y = kSavedDialogScanTop; y < height - kSavedDialogScanTop && !pDialog; y += kSavedDialogScanStep)
 	{
 		cIGZWin* pHit = pWinMgr->GetWindowFromPoint(width / 2, y);
-		std::string chain;
 		for (int depth = 0; pHit && pHit != pMain && depth < kMaxWinDepth; depth++)
 		{
-			chain += " 0x" + ToHex(pHit->GetID()) + " " + std::to_string(pHit->GetW()) + "x" + std::to_string(pHit->GetH());
 			if (pHit->GetW() < width || pHit->GetH() < height)
 			{
 				pDialog = pHit;
 			}
 			pHit = pHit->GetParentWin();
 		}
-		if (pDialog)
-		{
-			LogSavedDialogFinding("at (" + std::to_string(width / 2) + ", " + std::to_string(y) + "):" + chain);
-		}
 	}
-	if (!pDialog)
-	{
-		LogSavedDialogFinding("no window smaller than the game down the middle of " + std::to_string(width) + "x" + std::to_string(height));
-		return;
-	}
-	if (pDialog == pWin)
+	if (!pDialog || pDialog == pWin)
 	{
 		return;
 	}
@@ -1195,18 +1144,12 @@ void ChatPanel::CloseSavedDialog()
 			{
 				captions = true;
 			}
-			std::string kind;
-			if (isButton)
-			{
-				kind = " button";
-			}
-			LogSavedDialogFinding("window 0x" + ToHex(pAt->GetID()) + " " + std::to_string(pAt->GetW()) + "x" + std::to_string(pAt->GetH()) + kind + " \"" + caption + "\"");
 
-			if (caption.find("City Saved") != std::string::npos)
+			if (pAt->GetID() == kSavedDialogTextID || caption.find("City Saved") != std::string::npos)
 			{
 				saved = true;
 			}
-			else if (caption == "OK" && okX < 0)
+			else if (isButton && caption == "OK" && okX < 0)
 			{
 				okX = atLeft + pAt->GetW() / 2;
 				okY = atTop + pAt->GetH() / 2;
@@ -1216,23 +1159,24 @@ void ChatPanel::CloseSavedDialog()
 
 	// Without readable captions, a message box sized like "City Saved." with a single button, right after the save
 	bool shaped = pDialog->GetW() >= 200 && pDialog->GetW() <= 360 && pDialog->GetH() >= 90 && pDialog->GetH() <= 220;
-	const char* how = nullptr;
-	if (saved && okX >= 0)
+	bool byID = pDialog->GetID() == kSavedDialogID && okX >= 0;
+	std::string details;	// how it was found, if not by its ID, to know if its ID changes
+	if (!byID && saved && okX >= 0)
 	{
-		how = "by its text";
+		details = " (ID 0x" + ToHex(pDialog->GetID()) + ", found by its text)";
 	}
-	else if (!captions && shaped && buttons == 1)
+	else if (!byID && !captions && shaped && buttons == 1)
 	{
-		how = "by its shape, as its texts couldn't be read";
+		details = " (ID 0x" + ToHex(pDialog->GetID()) + ", " + std::to_string(pDialog->GetW()) + "x" + std::to_string(pDialog->GetH()) + ", found by its shape, as its texts couldn't be read)";
 		okX = buttonX;
 		okY = buttonY;
 	}
-	if (!how)
+	else if (!byID)
 	{
-		return;	// another dialog of the game's, which is left alone, or not up yet
+		return;	// another dialog of the game's, which is left alone
 	}
 
-	Log::Line(std::string("Hid the game's City Saved dialog, found ") + how + " (ID 0x" + ToHex(pDialog->GetID()) + ", " + std::to_string(pDialog->GetW()) + "x" + std::to_string(pDialog->GetH()) + ")");
+	Log::Line("Hid the game's City Saved dialog" + details);
 	savedDialogDeadline = 0;
 
 	PostMessageW(gameWindow, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(okX, okY));
