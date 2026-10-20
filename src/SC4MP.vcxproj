@@ -35,6 +35,7 @@
     <ClCompile Include="Bridge.cpp" />
     <ClCompile Include="ChatPanel.cpp" />
     <ClCompile Include="DebugUtil.cpp" />
+    <ClCompile Include="GuardDialog.cpp" />
     <ClCompile Include="Json.cpp" />
     <ClCompile Include="Log.cpp" />
     <ClCompile Include="SC4MPDirector.cpp" />
@@ -60,6 +61,7 @@
     <ClInclude Include="Bridge.h" />
     <ClInclude Include="ChatPanel.h" />
     <ClInclude Include="DebugUtil.h" />
+    <ClInclude Include="GuardDialog.h" />
     <ClInclude Include="GZWinInterfaces.h" />
     <ClInclude Include="Json.h" />
     <ClInclude Include="Log.h" />
