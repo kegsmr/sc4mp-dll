@@ -94,6 +94,11 @@ void Bridge::SetGuardHandler(GuardHandler handler)
 	guardHandler = std::move(handler);
 }
 
+void Bridge::SetClaimHandler(ClaimHandler handler)
+{
+	claimHandler = std::move(handler);
+}
+
 void Bridge::Send(JsonWriter message)
 {
 	if (!IsEnabled())
@@ -328,6 +333,21 @@ void Bridge::HandleLine(const std::string& line)
 		if (guardHandler)
 		{
 			guardHandler(message["owner"], message["city"], message["path"]);
+		}
+	}
+	else if (type == "claims_reset")
+	{
+		// The launcher's list of cities that belong to other mayors follows, one "claim" each
+		if (claimHandler)
+		{
+			claimHandler(true, std::string(), std::string(), std::string());
+		}
+	}
+	else if (type == "claim")
+	{
+		if (claimHandler)
+		{
+			claimHandler(false, message["owner"], message["city"], message["path"]);
 		}
 	}
 	else

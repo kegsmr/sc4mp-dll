@@ -18,6 +18,7 @@
 #include "GZServPtrs.h"
 #include "SC4UI.h"
 
+#include <cctype>
 #include <iterator>
 #include <vector>
 #include <windowsx.h>
@@ -159,6 +160,49 @@ void GuardDialog::Post(const std::string& owner, const std::string& city, const 
 	pendingWarning = warning;
 }
 
+void GuardDialog::PostClaim(bool reset, const std::string& owner, const std::string& city, const std::string& path)
+{
+	std::lock_guard<std::mutex> lock(inboxMutex);
+
+	if (reset)
+	{
+		claims.clear();
+		return;
+	}
+
+	Warning claim;
+	claim.owner = owner;
+	claim.city = city;
+	claim.path = path;
+	claims.push_back(claim);
+}
+
+void GuardDialog::CityOpened(const std::string& path)
+{
+	warnedPath.clear();
+	cityOpenedTime = GetTickCount64();
+
+	std::optional<Warning> claim;
+	{
+		std::lock_guard<std::mutex> lock(inboxMutex);
+		for (const Warning& candidate : claims)
+		{
+			if (IsSameSavegame(candidate.path, path))
+			{
+				claim = candidate;
+				break;
+			}
+		}
+	}
+
+	if (claim)
+	{
+		claim->path = path;	// the game's spelling, which IsOpenCity compares with
+		Log::Line("The opened city is in the launcher's list of other mayors' cities, so it's warned about right away");
+		Show(*claim);
+	}
+}
+
 void GuardDialog::Detach()
 {
 	closeRequested = false;
@@ -251,10 +295,30 @@ bool GuardDialog::OnTick(uint32_t unknown1)
 		warning.swap(pendingWarning);
 	}
 
+	// Logs when the game's first dialog after the city opened (eg. to reconcile the edges) comes, to check the order
+	if (cityOpenedTime)
+	{
+		cIGZWinMgrPtr pWinMgr;
+		ULONGLONG elapsed = GetTickCount64() - cityOpenedTime;
+		if (pWinMgr && pWinMgr->IsModal())
+		{
+			Log::Line("The game showed a dialog " + std::to_string(elapsed) + " ms after the city opened");
+			cityOpenedTime = 0;
+		}
+		else if (elapsed > 30000)
+		{
+			cityOpenedTime = 0;
+		}
+	}
+
 	if (warning)
 	{
 		// The player may have left the city (or opened another) before the launcher answered
-		if (IsOpenCity(warning->path))
+		if (IsSameSavegame(warning->path, warnedPath))
+		{
+			Log::Line("Ignored the launcher's claimed city warning, since the city was already warned about when it opened");
+		}
+		else if (IsOpenCity(warning->path))
 		{
 			Show(*warning);
 		}
@@ -270,6 +334,7 @@ bool GuardDialog::OnTick(uint32_t unknown1)
 void GuardDialog::Show(const Warning& warning)
 {
 	Detach();
+	warnedPath = warning.path;
 
 	cIGZWin* pNewParent = nullptr;
 	if (getParent)
@@ -700,6 +765,42 @@ bool GuardDialog::SetMouseFilter(bool add)
 }
 
 // Whether the city saved at `path` is the one open in game
+// Whether two paths are the same savegame. Only the region's folder and the file are compared, without case, since the
+// launcher and the game may spell the rest differently (eg. through Wine, or with a different user folder).
+bool GuardDialog::IsSameSavegame(const std::string& a, const std::string& b)
+{
+	auto tail = [](const std::string& path)
+	{
+		std::string lower = path;
+		for (char& c : lower)
+		{
+			if (c == '/')
+			{
+				c = '\\';
+			}
+			c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+		}
+
+		size_t file = lower.find_last_of('\\');
+		if (file == std::string::npos || file == 0)
+		{
+			return lower;
+		}
+		size_t folder = lower.find_last_of('\\', file - 1);
+		if (folder == std::string::npos)
+		{
+			return lower;
+		}
+		return lower.substr(folder + 1);
+	};
+
+	if (a.empty() || b.empty())
+	{
+		return false;
+	}
+	return tail(a) == tail(b);
+}
+
 bool GuardDialog::IsOpenCity(const std::string& path)
 {
 	cISC4AppPtr pApp;

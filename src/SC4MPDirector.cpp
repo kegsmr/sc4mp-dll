@@ -115,6 +115,7 @@ public:
 		bridge.SetStatusHandler([this](const std::string& state, const std::string& text) { chat.PostStatus(state, text); });
 		bridge.SetServerHandler([this](const std::string& name) { chat.PostServerName(name); });
 		bridge.SetGuardHandler([this](const std::string& owner, const std::string& city, const std::string& path) { guard.Post(owner, city, path); });
+		bridge.SetClaimHandler([this](bool reset, const std::string& owner, const std::string& city, const std::string& path) { guard.PostClaim(reset, owner, city, path); });
 
 		// In single player, only log what happens
 		if (!bridge.Start())
@@ -217,6 +218,9 @@ private:
 		message.Add("established", established);
 		message.Add("path", Text::ToUtf8(path.ToChar()));
 		bridge.Send(message);
+
+		// Before the game's own prompts (eg. to reconcile the edges), if the launcher already said whose city it is
+		guard.CityOpened(Text::ToUtf8(path.ToChar()));
 
 		chat.Attach(GetSC4AppChild(kGZWin_SC4View3DWin));
 	}

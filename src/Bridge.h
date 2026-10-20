@@ -43,6 +43,11 @@ public:
 	using GuardHandler = std::function<void(const std::string& owner, const std::string& city, const std::string& path)>;
 	void SetGuardHandler(GuardHandler handler);
 
+	// Called on the bridge thread for the launcher's list of cities that belong to other mayors: once with `reset`, then
+	// once for each city. Set it before Start().
+	using ClaimHandler = std::function<void(bool reset, const std::string& owner, const std::string& city, const std::string& path)>;
+	void SetClaimHandler(ClaimHandler handler);
+
 	// Queues a message for the launcher, adding the current time. Messages wait in the queue
 	// while the launcher isn't connected.
 	void Send(JsonWriter message);
@@ -63,6 +68,7 @@ private:
 	StatusHandler statusHandler;
 	ServerHandler serverHandler;
 	GuardHandler guardHandler;
+	ClaimHandler claimHandler;
 
 	std::mutex mutex;
 	std::condition_variable stopped;

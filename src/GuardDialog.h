@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <functional>
 #include <mutex>
+#include <vector>
 #include <optional>
 #include <string>
 #include <Windows.h>
@@ -17,7 +18,7 @@ class cIGZWin;
 // "Back to region" exits to the region view without saving, and "Look around" closes the warning.
 //
 // The window is made by the game from the UI script in ui/GuardDialog.ui, like the chat panel.
-// Only Post() may be called from another thread: the warning is shown on the next frame (OnTick), on the game thread.
+// Only Post() and PostClaim() may be called from another thread: the warning is shown on the next frame (OnTick), on the game thread.
 class GuardDialog final : public cRZBaseSystemService, private cIGZWinProc, private cIGZWinProcFilterW32
 {
 public:
@@ -31,6 +32,13 @@ public:
 
 	// Shows the warning for the city saved at `path`, if it's still the open city by then. Safe to call from any thread.
 	void Post(const std::string& owner, const std::string& city, const std::string& path);
+
+	// Keeps the launcher's list of cities that belong to other mayors, cleared by `reset`. Safe to call from any thread.
+	void PostClaim(bool reset, const std::string& owner, const std::string& city, const std::string& path);
+
+	// Shows the warning right away if the city saved at `path`, which just opened, is in the launcher's list, so it
+	// comes before the game's own prompts (eg. to reconcile the edges). Called on the game thread.
+	void CityOpened(const std::string& path);
 
 	// Removes the warning, eg. when the city closes
 	void Detach();
@@ -70,6 +78,7 @@ private:
 	bool SetMouseFilter(bool add);
 
 	static bool IsOpenCity(const std::string& path);
+	static bool IsSameSavegame(const std::string& a, const std::string& b);
 
 	ParentFunction getParent;
 	bool started = false;
@@ -87,4 +96,8 @@ private:
 
 	std::mutex inboxMutex;
 	std::optional<Warning> pendingWarning;
+	std::vector<Warning> claims;	// the launcher's list of cities that belong to other mayors
+
+	std::string warnedPath;	// the open city's savegame, if it was warned about, so the launcher's own check doesn't warn again
+	ULONGLONG cityOpenedTime = 0;	// when the city opened, until the game's first dialog after it is logged
 };
