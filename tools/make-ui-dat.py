@@ -14,6 +14,7 @@ from pathlib import Path
 # File name in `ui` -> (group, instance). These must match the keys in the DLL's source.
 UI_FILES = {
 	"ChatPanel.ui": (0xC0E6A1C5, 0x1A9F3B21),
+	"GuardDialog.ui": (0xC0E6A1C5, 0x5D2C7E43),
 }
 
 UI_TYPE = 0x00000000
@@ -39,6 +40,8 @@ IMAGE_FILES = {
 	"status-connected.png": 0xBD4F44DD,
 	"status-disconnected.png": 0xBEF3434A,
 	"status-guest.png": 0x71DB29A5,
+	"guard-panel.png": 0x2F8D41B7,
+	"guard-button.png": 0x93C6E05A,
 
 	# Region tile badges, not used yet
 	"tile-you.png": 0x8A6EFE32,

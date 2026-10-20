@@ -39,6 +39,10 @@ public:
 	void SetStatusHandler(StatusHandler handler);
 	void SetServerHandler(ServerHandler handler);
 
+	// Called on the bridge thread when the launcher says the city saved at `path` belongs to another mayor (`owner`). Set it before Start().
+	using GuardHandler = std::function<void(const std::string& owner, const std::string& city, const std::string& path)>;
+	void SetGuardHandler(GuardHandler handler);
+
 	// Queues a message for the launcher, adding the current time. Messages wait in the queue
 	// while the launcher isn't connected.
 	void Send(JsonWriter message);
@@ -58,6 +62,7 @@ private:
 	NotifyHandler notifyHandler;
 	StatusHandler statusHandler;
 	ServerHandler serverHandler;
+	GuardHandler guardHandler;
 
 	std::mutex mutex;
 	std::condition_variable stopped;

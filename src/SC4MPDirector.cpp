@@ -1,6 +1,7 @@
 #include "version.h"
 #include "Bridge.h"
 #include "ChatPanel.h"
+#include "GuardDialog.h"
 #include "Json.h"
 #include "Log.h"
 #include "Text.h"
@@ -113,6 +114,7 @@ public:
 		bridge.SetNotifyHandler([this](const std::string& text, bool history, const std::string& name, const std::string& color) { chat.Post(text, history, name, color); });
 		bridge.SetStatusHandler([this](const std::string& state, const std::string& text) { chat.PostStatus(state, text); });
 		bridge.SetServerHandler([this](const std::string& name) { chat.PostServerName(name); });
+		bridge.SetGuardHandler([this](const std::string& owner, const std::string& city, const std::string& path) { guard.Post(owner, city, path); });
 
 		// In single player, only log what happens
 		if (!bridge.Start())
@@ -127,12 +129,15 @@ public:
 			[this](const std::string& text) { SendChat(text); },
 			[this](const std::string& command) { SendCommand(command); });
 
+		guard.Start([]() { return GetSC4AppChild(kGZWin_SC4View3DWin); });
+
 		return true;
 	}
 
 	// The game's windows still exist here, but not after the app shuts down
 	bool PreAppShutdown()
 	{
+		guard.Stop();
 		chat.Stop();
 		return true;
 	}
@@ -163,6 +168,7 @@ public:
 			SendCityEvent("saved", "Saved city");
 			break;
 		case kSC4MessagePreCityShutdown:
+			guard.Detach();
 			chat.Detach();
 			SendCityEvent("city_exited", "Exiting city");
 			break;
@@ -201,10 +207,15 @@ private:
 			Log::Line("Loaded city in God Mode: " + name);
 		}
 
+		// The launcher finds the city's tile (and who owns it) from its savegame
+		cRZBaseString path;
+		pCity->GetCitySaveFilePath(path);
+
 		JsonWriter message;
 		message.Add("type", "city_loaded");
 		message.Add("name", name);
 		message.Add("established", established);
+		message.Add("path", Text::ToUtf8(path.ToChar()));
 		bridge.Send(message);
 
 		chat.Attach(GetSC4AppChild(kGZWin_SC4View3DWin));
@@ -402,8 +413,9 @@ private:
 		return Text::ToUtf8(name.ToChar());
 	}
 
-	// Declared first, so it outlives the bridge, which may still be posting to it
+	// Declared first, so they outlive the bridge, which may still be posting to them
 	ChatPanel chat;
+	GuardDialog guard;
 	Bridge bridge;
 };
 
