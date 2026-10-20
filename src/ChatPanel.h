@@ -68,6 +68,7 @@ private:
 	void GetPanelOrigin(int32_t& left, int32_t& top) const;
 	uint32_t GetButtonAt(int32_t x, int32_t y) const;
 	void LogPress(int32_t x, int32_t y, uint32_t button);
+	void LogAnyPress(int32_t x, int32_t y);
 	bool IsOnChild(uint32_t id, int32_t x, int32_t y) const;
 	void StartDragging(HWND hWnd, int32_t x, int32_t y);
 	void Drag(int32_t x, int32_t y);
@@ -159,6 +160,8 @@ private:
 	uint32_t buttonsDown = 0;	// the mouse buttons (MK_LBUTTON, etc.) pressed on the panel, whose release is kept from the game too
 	bool loggedCoveredClick = false;
 	int loggedPresses = 0;	// presses on the panel logged so far (see LogPress)
+	int loggedAnyPresses = 0;	// and anywhere (see LogAnyPress)
+	int loggedCommands = 0;	// and button clicks the game reported
 
 	std::mutex inboxMutex;
 	std::deque<Notice> inbox;	// lines from the bridge thread, waiting for the next frame

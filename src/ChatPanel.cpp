@@ -511,6 +511,13 @@ bool ChatPanel::DoWinProcMessage(cIGZWin* pSender, cGZMessage& msg)
 		return false;
 	}
 
+	// Logged a few times, to see which buttons the game itself reports clicked
+	if (loggedCommands < 5)
+	{
+		loggedCommands++;
+		Log::Line("The game reported a click on the chat panel's button 0x" + ToHex(msg.dwData2));
+	}
+
 	return Click(msg.dwData2);	// the button's ID
 }
 
@@ -597,6 +604,11 @@ bool ChatPanel::HandleMouse(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	POINT point{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
 	uint32_t button = 0;
 	bool down = false;
+
+	if (uMsg == WM_LBUTTONDOWN)
+	{
+		LogAnyPress(point.x, point.y);
+	}
 
 	switch (uMsg)
 	{
@@ -1005,6 +1017,37 @@ uint32_t ChatPanel::GetButtonAt(int32_t x, int32_t y) const
 	return 0;
 }
 
+// Logs the first few left presses anywhere in the game window, with the panel's place, to find out why a click on
+// the panel isn't taken
+void ChatPanel::LogAnyPress(int32_t x, int32_t y)
+{
+	if (loggedAnyPresses >= 5)
+	{
+		return;
+	}
+	loggedAnyPresses++;
+
+	int32_t left = 0;
+	int32_t top = 0;
+	GetPanelOrigin(left, top);
+
+	cIGZWinMgrPtr pWinMgr;
+	bool modal = pWinMgr && pWinMgr->IsModal();
+	std::string hit = "none";
+	if (pWinMgr)
+	{
+		cIGZWin* pHit = pWinMgr->GetWindowFromPoint(x, y);
+		if (pHit)
+		{
+			hit = "0x" + ToHex(pHit->GetID()) + " " + std::to_string(pHit->GetW()) + "x" + std::to_string(pHit->GetH());
+		}
+	}
+
+	Log::Line("Left press in the game window at (" + std::to_string(x) + ", " + std::to_string(y) + "): the panel is at (" + std::to_string(left) + ", " + std::to_string(top) + "), "
+		+ std::to_string(pWin->GetW()) + "x" + std::to_string(pWin->GetH()) + ", minimized " + std::to_string(minimized) + ", modal " + std::to_string(modal)
+		+ ", window there " + hit + ", on the panel " + std::to_string(IsOnPanel(x, y)));
+}
+
 // Logs what the first few presses on the panel did, to find out why a click does nothing
 void ChatPanel::LogPress(int32_t x, int32_t y, uint32_t button)
 {
@@ -1407,6 +1450,12 @@ void ChatPanel::Layout()
 		GetChipPlace(chipSpot, left, top);
 		PlaceWindow(pWin, left, top);
 		pWin->PullToFront();	// over windows the view added after it
+
+		int32_t originLeft = 0;
+		int32_t originTop = 0;
+		GetPanelOrigin(originLeft, originTop);
+		Log::Line("Placed the chat chip at (" + std::to_string(pWin->GetL()) + ", " + std::to_string(pWin->GetT()) + "), " + std::to_string(pWin->GetW()) + "x" + std::to_string(pWin->GetH())
+			+ ", in a view of " + std::to_string(parentWidth) + "x" + std::to_string(parentHeight) + ", at (" + std::to_string(originLeft) + ", " + std::to_string(originTop) + ") in the game window");
 	}
 	else
 	{
