@@ -78,7 +78,7 @@ static constexpr int kNameColorCount = static_cast<int>(std::size(kNameColors));
 static constexpr uint32_t kButtonIDs[] = { kMinimizeButtonID, kHideButtonID, kShowButtonID, kChatButtonID, kChipID };
 
 // Windows in the title bar, shown unless the panel is minimized
-static constexpr uint32_t kTitleBarIDs[] = { kTitleID, kStatusPillID, kStatusTextID, kMinimizeButtonID };
+static constexpr uint32_t kTitleBarIDs[] = { kTitleID, kMinimizeButtonID };
 
 // Where the panel's open, collapsed or minimized state is kept between games
 static constexpr wchar_t kSettingsKey[] = L"Software\\SC4MP\\DLL";
@@ -99,11 +99,12 @@ static constexpr std::pair<const char*, uint32_t> kStatusIcons[] = {
 
 static constexpr size_t kLineCount = 8;
 static constexpr size_t kLineLength = 48;			// characters that fit on a line, roughly, since the font isn't monospaced
-static constexpr size_t kShownInputLength = 40;		// the end of a longer message is shown while typing it
+static constexpr int32_t kInputWidth = 158;			// the input's text window, less its gutters; the end of a longer message is shown while typing it
 static constexpr size_t kMaxInputLength = 200;
 static constexpr size_t kMaxInbox = 100;
-static constexpr size_t kTitleLength = 19;			// before the title runs into the unread badge
-static constexpr size_t kStatusLength = 20;			// before the status runs out of its pill
+static constexpr int32_t kTitleWidth = 258;			// the title's text window, less its gutters, before the unread badge
+static constexpr int32_t kTitleFontScale = 9;		// the title's font (DataInsetHeader) is about 9/8 as wide as the chat lines' (see ShortenToWidth)
+static constexpr int32_t kStatusWidth = 91;			// the status's text window in its pill, less its gutters
 static constexpr size_t kNameLength = 20;			// a longer player name is shortened
 static constexpr int32_t kNameGap = 4;				// between a player's name and their message
 static constexpr int32_t kCollapsedHeight = 42;		// just the title bar in its frame, as in chat-panel-collapsed.png
@@ -156,8 +157,9 @@ static std::vector<std::wstring> Wrap(const std::wstring& text)
 }
 
 // Estimates how wide text is in the chat lines' font. The pinned gzcom-dll has no way to ask the game's font (cIGZFont),
-// so this uses widths of the chat lines' font (DataInsetLegend) measured in game, rounded up a little so a message
-// doesn't run into the name before it. Eg. "Keg (1):" is about 27 pixels wide in game, and 32 here.
+// so this uses widths of the chat lines' font (DataInsetLegend) measured in game at 1024x768, with the pixel between
+// letters, rounded up a little so a message doesn't run into the name before it. Eg. "Keg (1):" is about 36 pixels wide
+// in game, and 40 here. (The widths before were measured from a scaled down screenshot, so the colon was hidden.)
 static int32_t EstimateWidth(const std::wstring& text)
 {
 	int32_t width = 0;
@@ -166,35 +168,54 @@ static int32_t EstimateWidth(const std::wstring& text)
 	{
 		if (wcschr(L"ijl.,:;'!| ", c))
 		{
-			width += 2;
+			width += 3;
 		}
 		else if (wcschr(L"ftr()[]-I", c))
 		{
-			width += 3;
+			width += 4;
 		}
 		else if (wcschr(L"mwMW@", c))
 		{
-			width += 10;
+			width += 11;
 		}
 		else if (c >= L'A' && c <= L'Z')
 		{
-			width += 6;
+			width += 7;
 		}
 		else if (c >= L'0' && c <= L'9')
 		{
-			width += 6;
+			width += 7;
 		}
 		else if (c < 0x2E80)
 		{
-			width += 5;
+			width += 6;
 		}
 		else
 		{
-			width += 12;	// Chinese, Japanese, Korean, etc.
+			width += 13;	// Chinese, Japanese, Korean, etc.
 		}
 	}
 
 	return width;
+}
+
+// Shortens text to fit `width` pixels, ending it with "..." if it was cut. A text window that's too narrow for its text
+// shows only what fits before a space, so text has to be shortened to fit. `scale` / 8 is how much wider than the chat
+// lines' font its font is (see EstimateWidth).
+static std::string ShortenToWidth(const std::string& text, int32_t width, int32_t scale)
+{
+	std::wstring wide = Text::Utf8ToWide(text);
+	if (EstimateWidth(wide) * scale / 8 <= width)
+	{
+		return text;
+	}
+
+	while (!wide.empty() && EstimateWidth(wide + L"...") * scale / 8 > width)
+	{
+		wide.pop_back();
+	}
+
+	return Text::WideToUtf8(wide) + "...";
 }
 
 // Returns the name color (in kNameColors) nearest to the launcher's, which comes as "[red,green,blue]", or -1 if there's none
@@ -1066,6 +1087,10 @@ void ChatPanel::Layout()
 	SetChildVisible(kChipID, minimized);
 	SetChildVisible(kChipTextID, minimized);
 
+	// The status is in the bottom band, beside Send, so the title can have the whole title bar
+	SetChildVisible(kStatusPillID, open);
+	SetChildVisible(kStatusTextID, open);
+
 	// Shrunk too, so the empty part doesn't take clicks meant for the view under it
 	int32_t width = openWidth;
 	int32_t height = openHeight;
@@ -1242,9 +1267,13 @@ void ChatPanel::ShowInput()
 	}
 
 	std::wstring shown = input;
-	if (shown.size() > kShownInputLength)
+	if (EstimateWidth(L"> " + shown + L"_") > kInputWidth)
 	{
-		shown = L"..." + shown.substr(shown.size() - kShownInputLength);
+		while (!shown.empty() && EstimateWidth(L"> ..." + shown + L"_") > kInputWidth)
+		{
+			shown.erase(0, 1);
+		}
+		shown = L"..." + shown;
 	}
 
 	SetText(kInputID, "> " + Text::WideToUtf8(shown) + "_");
@@ -1258,7 +1287,7 @@ void ChatPanel::ShowTitle()
 	}
 	else
 	{
-		SetText(kTitleID, Shorten(serverName, kTitleLength));
+		SetText(kTitleID, ShortenToWidth(serverName, kTitleWidth, kTitleFontScale));
 	}
 
 	std::string count = std::to_string(unread);
@@ -1287,7 +1316,8 @@ void ChatPanel::ShowStatus()
 {
 	const auto& [state, text] = status;
 
-	// The icon is shown on the title bar, or on the chip when minimized. An unknown state from a newer launcher has none.
+	// The icon is shown in the status pill while the panel's open, or on the chip when minimized (the collapsed bar has
+	// no room for it beside the title). An unknown state from a newer launcher has none.
 	uint32_t shown = 0;
 	for (const auto& [iconState, id] : kStatusIcons)
 	{
@@ -1297,7 +1327,7 @@ void ChatPanel::ShowStatus()
 			{
 				shown = id + kChipIconOffset;
 			}
-			else
+			else if (!collapsed)
 			{
 				shown = id;
 			}
@@ -1310,7 +1340,7 @@ void ChatPanel::ShowStatus()
 		SetChildVisible(id + kChipIconOffset, id + kChipIconOffset == shown);
 	}
 
-	SetText(kStatusTextID, Shorten(text, kStatusLength));
+	SetText(kStatusTextID, ShortenToWidth(text, kStatusWidth, 8));
 }
 
 void ChatPanel::SetText(uint32_t id, const std::string& text)

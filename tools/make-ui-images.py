@@ -47,8 +47,8 @@ TILE_UNCLAIMED = (92, 151, 190)
 
 # The layout, which must match ui/ChatPanel.ui
 COLLAPSED_SIZE = (366, 42)
-FIELD_SIZE = (290, 26)
-PILL_SIZE = (120, 20)
+FIELD_SIZE = (172, 26)
+PILL_SIZE = (118, 20)
 TITLE_BUTTON_SIZE = (22, 20)	# like the game's
 
 STATES = ("disabled", "normal", "pressed", "hover")
