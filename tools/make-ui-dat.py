@@ -1,6 +1,7 @@
-"""Packs the SC4MP UI scripts in `ui` into `sc4mp-dll-ui.dat`, which goes in the Plugins folder with `sc4mp.dll`.
+"""Packs the SC4MP UI scripts in `ui` and their images in `ui/images` into `sc4mp-dll-ui.dat`, which goes in the Plugins folder with `sc4mp.dll`.
 
 The game reads UI scripts (type 0) from any DBPF file in Plugins, so the DLL can create windows from them by group and instance (see `ChatPanel.cpp`). The files are stored uncompressed, which SimCity 4 reads fine.
+The scripts use the images as `image={46a006b0,<instance>}`, like the game's own UI images and the launcher's `sc4mp-ui.dat`. The images are drawn by `make-ui-images.py`.
 
 Usage: python tools/make-ui-dat.py [output.dat]
 """
@@ -16,6 +17,38 @@ UI_FILES = {
 }
 
 UI_TYPE = 0x00000000
+
+# File name in `ui/images` -> instance. They're PNGs in the game's UI image group. The instances are random, so they
+# don't clash with the game's, the launcher's (0x14416302, 0x14416312, 0x14416314, 0xEA7F0EAE) or other plugins' images.
+IMAGE_FILES = {
+	"chat-panel.png": 0x5417738C,
+	"chat-panel-collapsed.png": 0x6E45DC90,
+	"chat-field.png": 0xF9C0707C,
+	"chat-field-typing.png": 0x62225A7B,
+	"chat-hide.png": 0xE4A1CC50,
+	"chat-show.png": 0x47A9D6D8,
+	"chat-send.png": 0x908BA8F4,
+	"chat-minimize.png": 0x391B92E8,
+	"chat-chip.png": 0x3B71C9C9,
+	"chat-badge.png": 0xD1AA828D,
+	"status-pill.png": 0xD5EB56FA,
+	"status-saved.png": 0xEB0C124A,
+	"status-saving.png": 0x8ED6ED86,
+	"status-failed.png": 0x8E5FC42E,
+	"status-not-saved.png": 0xCA21110A,
+	"status-connected.png": 0xBD4F44DD,
+	"status-disconnected.png": 0xBEF3434A,
+	"status-guest.png": 0x71DB29A5,
+
+	# Region tile badges, not used yet
+	"tile-you.png": 0x8A6EFE32,
+	"tile-claimed.png": 0x6371783A,
+	"tile-unclaimed.png": 0x594BBB73,
+	"tile-abandoned.png": 0x124589CC,
+}
+
+IMAGE_TYPE = 0x856DDBAC
+IMAGE_GROUP = 0x46A006B0
 
 
 def make_dbpf(entries):
@@ -46,6 +79,9 @@ def main():
 		# The game wants Windows line endings, like the scripts it ships with
 		text = (root / "ui" / name).read_text(encoding="utf-8").replace("\r\n", "\n").replace("\n", "\r\n")
 		entries.append((UI_TYPE, group, instance, text.encode("utf-8")))
+
+	for name, instance in IMAGE_FILES.items():
+		entries.append((IMAGE_TYPE, IMAGE_GROUP, instance, (root / "ui" / "images" / name).read_bytes()))
 
 	output.write_bytes(make_dbpf(entries))
 	print(f"Wrote {output}")
