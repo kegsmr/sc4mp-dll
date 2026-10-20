@@ -106,7 +106,7 @@ static constexpr size_t kTitleLength = 19;			// before the title runs into the u
 static constexpr size_t kStatusLength = 20;			// before the status runs out of its pill
 static constexpr size_t kNameLength = 20;			// a longer player name is shortened
 static constexpr int32_t kNameGap = 4;				// between a player's name and their message
-static constexpr int32_t kCollapsedHeight = 42;		// just the title bar (and its shadow), as in chat-panel-collapsed.png
+static constexpr int32_t kCollapsedHeight = 42;		// just the title bar in its frame, as in chat-panel-collapsed.png
 
 static constexpr uint32_t kGZWinMessageCommand = 3;
 static constexpr uint32_t kGZWinCommandButtonClicked = 0x287259F6;

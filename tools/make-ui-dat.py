@@ -21,16 +21,12 @@ UI_TYPE = 0x00000000
 
 # File name in `ui/images` -> instance. They're PNGs in the game's UI image group. The instances are random, so they
 # don't clash with the game's, the launcher's (0x14416302, 0x14416312, 0x14416314, 0xEA7F0EAE) or other plugins' images.
+# The panel frames and most buttons are the game's own images, which the scripts use by their keys, so they aren't here.
 IMAGE_FILES = {
-	"chat-panel.png": 0x5417738C,
 	"chat-panel-collapsed.png": 0x6E45DC90,
 	"chat-field.png": 0xF9C0707C,
 	"chat-field-typing.png": 0x62225A7B,
-	"chat-hide.png": 0xE4A1CC50,
-	"chat-show.png": 0x47A9D6D8,
-	"chat-send.png": 0x908BA8F4,
 	"chat-minimize.png": 0x391B92E8,
-	"chat-chip.png": 0x3B71C9C9,
 	"chat-badge.png": 0xD1AA828D,
 	"status-pill.png": 0xD5EB56FA,
 	"status-saved.png": 0xEB0C124A,
@@ -40,8 +36,6 @@ IMAGE_FILES = {
 	"status-connected.png": 0xBD4F44DD,
 	"status-disconnected.png": 0xBEF3434A,
 	"status-guest.png": 0x71DB29A5,
-	"guard-panel.png": 0x2F8D41B7,
-	"guard-button.png": 0x93C6E05A,
 
 	# Region tile badges, not used yet
 	"tile-you.png": 0x8A6EFE32,
