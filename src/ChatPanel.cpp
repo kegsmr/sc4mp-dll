@@ -75,7 +75,7 @@ static constexpr uint8_t kNameColors[][3] = {
 static constexpr int kNameColorCount = static_cast<int>(std::size(kNameColors));
 
 // The panel's buttons, of which only the shown ones can be clicked
-static constexpr uint32_t kButtonIDs[] = { kMinimizeButtonID, kHideButtonID, kShowButtonID, kChatButtonID, kChipID };
+static constexpr uint32_t kButtonIDs[] = { kMinimizeButtonID, kHideButtonID, kShowButtonID, kChatButtonID, kChipID, kFieldID };	// the field is clicked to type
 
 // Windows in the title bar, shown unless the panel is minimized
 static constexpr uint32_t kTitleBarIDs[] = { kTitleID, kStatusTipID, kMinimizeButtonID };
@@ -522,6 +522,9 @@ bool ChatPanel::Click(uint32_t buttonID)
 	case kChipID:
 		SetMinimized(false);
 		return true;
+	case kFieldID:
+		StartTyping();
+		return true;
 	case kChatButtonID:
 		if (typing)
 		{
@@ -624,6 +627,12 @@ bool ChatPanel::HandleMouse(HWND hWnd, UINT uMsg, LPARAM lParam)
 
 	if (!IsOnPanel(point.x, point.y))
 	{
+		// A click elsewhere is the player turning back to the game, so the keys go to it again. The click still
+		// reaches the map, and the typed text is kept for next time.
+		if (typing)
+		{
+			PauseTyping();
+		}
 		return false;
 	}
 
@@ -873,6 +882,13 @@ void ChatPanel::StopTyping()
 {
 	typing = false;
 	input.clear();
+	ShowInput();
+}
+
+// Stops typing but keeps the text, which is shown in the field until the player types again
+void ChatPanel::PauseTyping()
+{
+	typing = false;
 	ShowInput();
 }
 
@@ -1163,23 +1179,30 @@ void ChatPanel::ShowInput()
 	SetChildVisible(kFieldID, open && !typing);
 	SetChildVisible(kTypingFieldID, open && typing);
 
-	if (!typing)
+	if (!typing && input.empty())
 	{
 		SetText(kInputID, kInputHint);
 		return;
 	}
 
-	std::wstring shown = input;
-	if (Text::EstimateWidth(L"> " + shown + L"_") > kInputWidth)
+	// The caret shows while typing. Text kept from a click outside the panel is shown without it.
+	std::wstring caret;
+	if (typing)
 	{
-		while (!shown.empty() && Text::EstimateWidth(L"> ..." + shown + L"_") > kInputWidth)
+		caret = L"_";
+	}
+
+	std::wstring shown = input;
+	if (Text::EstimateWidth(shown + caret) > kInputWidth)
+	{
+		while (!shown.empty() && Text::EstimateWidth(L"..." + shown + caret) > kInputWidth)
 		{
 			shown.erase(0, 1);
 		}
 		shown = L"..." + shown;
 	}
 
-	SetText(kInputID, "> " + Text::WideToUtf8(shown) + "_");
+	SetText(kInputID, Text::WideToUtf8(shown + caret));
 }
 
 void ChatPanel::ShowTitle()

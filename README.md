@@ -3,7 +3,7 @@
 TODO
 ## Chat panel
 
-When SimCity 4 is started by the SC4MP launcher, the DLL shows the server's chat in the city and region views. Press Enter (or click the send button) to type a message, Enter to send it and Esc to cancel. A message starting with `/` runs a launcher command, eg. `/status`. The title bar shows the server's name and the save status's icon (hover it for the status). The chevron collapses the panel to its title bar, which then counts new messages, and the arrow minimizes it to a small button in the bottom right corner (Enter or a click opens it again). The panel starts minimized, and keeps the player's choice while the game runs.
+When SimCity 4 is started by the SC4MP launcher, the DLL shows the server's chat in the city and region views. Press Enter (or click the text field or the send button) to type a message, Enter to send it and Esc to cancel. A click outside the panel goes back to the game and keeps the message for later. A message starting with `/` runs a launcher command, eg. `/status`. The title bar shows the server's name and the save status's icon (hover it for the status). The chevron collapses the panel to its title bar, which then counts new messages, and the arrow minimizes it to a small button in the bottom right corner (Enter or a click opens it again). The panel starts minimized, and keeps the player's choice while the game runs.
 
 The panel is a normal SC4 window, made by the game from the UI script in `ui/ChatPanel.ui`. `sc4mp-dll-ui.dat` must be in the Plugins folder next to `sc4mp.dll`; the build makes it with:
 

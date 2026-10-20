@@ -72,6 +72,7 @@ private:
 	void Paste(HWND hWnd);
 	void Send();
 	void StopTyping();
+	void PauseTyping();
 	bool GameWantsEnter() const;
 
 	struct Notice
