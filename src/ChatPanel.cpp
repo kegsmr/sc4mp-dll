@@ -694,11 +694,18 @@ bool ChatPanel::HandleMouse(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	if (button == MK_LBUTTON)
 	{
 		uint32_t clicked = GetButtonAt(point.x, point.y);
-		if (clicked)
+		LogPress(point.x, point.y, clicked);
+
+		if (minimized)
+		{
+			// The minimized panel is just the round button, so a press anywhere on it opens the panel
+			SetMinimized(false);
+		}
+		else if (clicked)
 		{
 			Click(clicked);
 		}
-		else if (!minimized && IsOnChild(kScrollbarID, point.x, point.y))
+		else if (IsOnChild(kScrollbarID, point.x, point.y))
 		{
 			// The game's scrollbar never sees the press, so it's done here
 			PressScrollbar(point.y, true);
@@ -996,6 +1003,29 @@ uint32_t ChatPanel::GetButtonAt(int32_t x, int32_t y) const
 	}
 
 	return 0;
+}
+
+// Logs what the first few presses on the panel did, to find out why a click does nothing
+void ChatPanel::LogPress(int32_t x, int32_t y, uint32_t button)
+{
+	if (loggedPresses >= 5)
+	{
+		return;
+	}
+	loggedPresses++;
+
+	int32_t left = 0;
+	int32_t top = 0;
+	GetPanelOrigin(left, top);
+	std::string text = "Press on the chat panel at (" + std::to_string(x) + ", " + std::to_string(y) + "): panel at (" + std::to_string(left) + ", " + std::to_string(top) + "), "
+		+ std::to_string(pWin->GetW()) + "x" + std::to_string(pWin->GetH()) + ", minimized " + std::to_string(minimized) + ", button 0x" + ToHex(button);
+
+	cIGZWin* pChip = pWin->GetChildWindowFromID(kChipID);
+	if (pChip)
+	{
+		text += ", chip at (" + std::to_string(pChip->GetL()) + ", " + std::to_string(pChip->GetT()) + "), " + std::to_string(pChip->GetW()) + "x" + std::to_string(pChip->GetH()) + ", visible " + std::to_string(pChip->IsVisible());
+	}
+	Log::Line(text);
 }
 
 // Whether a point in the game window is on one of the panel's shown windows
