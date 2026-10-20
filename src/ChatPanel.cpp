@@ -461,8 +461,15 @@ void ChatPanel::Paste(HWND hWnd)
 		{
 			for (; *text; text++)
 			{
+				wchar_t c = *text;
+
 				// A message is one line
-				Type(*text == L'\r' || *text == L'\n' || *text == L'\t' ? L' ' : *text);
+				if (c == L'\r' || c == L'\n' || c == L'\t')
+				{
+					c = L' ';
+				}
+
+				Type(c);
 			}
 			GlobalUnlock(data);
 		}
@@ -485,9 +492,14 @@ void ChatPanel::Send()
 	if (text[0] == '/')
 	{
 		std::string command = Trim(text.substr(1));
+		if (command.empty())
+		{
+			command = "help";
+		}
+
 		if (sendCommand)
 		{
-			sendCommand(command.empty() ? "help" : command);
+			sendCommand(command);
 		}
 	}
 	else if (sendChat)
@@ -594,9 +606,17 @@ void ChatPanel::SetCollapsed(bool value)
 	SetChildVisible(kInputID, !collapsed);
 	SetChildVisible(kChatButtonID, !collapsed);
 
-	pWin->SetH(collapsed ? kCollapsedHeight : expandedHeight);
+	if (collapsed)
+	{
+		pWin->SetH(kCollapsedHeight);
+		SetCaption(kHideButtonID, "Show");
+	}
+	else
+	{
+		pWin->SetH(expandedHeight);
+		SetCaption(kHideButtonID, "Hide");
+	}
 
-	SetCaption(kHideButtonID, collapsed ? "Show" : "Hide");
 	ShowTitle();
 }
 
@@ -607,7 +627,16 @@ void ChatPanel::ShowLines()
 
 	for (size_t i = 0; i < kLineCount; i++)
 	{
-		SetText(kFirstLineID + static_cast<uint32_t>(i), i < blank ? std::string() : lines[i - blank]);
+		uint32_t id = kFirstLineID + static_cast<uint32_t>(i);
+
+		if (i < blank)
+		{
+			SetText(id, std::string());
+		}
+		else
+		{
+			SetText(id, lines[i - blank]);
+		}
 	}
 }
 
@@ -673,7 +702,12 @@ void ChatPanel::SetCaption(uint32_t id, const std::string& text)
 
 void ChatPanel::SetChildVisible(uint32_t id, bool visible)
 {
-	cIGZWin* pChild = pWin ? pWin->GetChildWindowFromID(id) : nullptr;
+	if (!pWin)
+	{
+		return;
+	}
+
+	cIGZWin* pChild = pWin->GetChildWindowFromID(id);
 	if (!pChild)
 	{
 		return;
