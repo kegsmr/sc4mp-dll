@@ -175,7 +175,7 @@ public:
 			break;
 		case kSC4MessagePostRegionInit:
 			RegionLoaded();
-			chat.Attach(GetSC4AppChild(kGZWin_SC4WinRegionScreen));
+			chat.Attach(GetSC4AppChild(kGZWin_SC4WinRegionScreen), true);
 			break;
 		case kSC4MessagePreRegionShutdown:
 			chat.Detach();
@@ -222,7 +222,7 @@ private:
 		// Before the game's own prompts (eg. to reconcile the edges), if the launcher already said whose city it is
 		guard.CityOpened(Text::ToUtf8(path.ToChar()));
 
-		chat.Attach(GetSC4AppChild(kGZWin_SC4View3DWin));
+		chat.Attach(GetSC4AppChild(kGZWin_SC4View3DWin), false);
 	}
 
 	// Sends an event about the open city. The current city is read from the app, since not every message carries it.

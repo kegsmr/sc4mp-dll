@@ -38,6 +38,24 @@ public:
 	virtual bool SetCaption(cIGZString const& caption) = 0;
 };
 
+static const uint32_t kGZIID_cIGZWinScrollbar = 0x61325A2D;
+
+// The game's scrollbar, whose range and value the chat panel sets. Only the methods up to SetPageSize are declared, in
+// the order of the current gzcom-dll's cIGZWinScrollbar.h.
+class cIGZWinScrollbar : public cIGZUnknown
+{
+public:
+	virtual cIGZWin* AsIGZWin() = 0;
+	virtual void* AsIGZWinSlider() = 0;
+	virtual bool SetValue(int32_t value) = 0;
+	virtual int32_t GetValue() const = 0;
+	virtual bool SetMinMax(int32_t min, int32_t max) = 0;
+	virtual bool GetMinMax(int32_t& min, int32_t& max) const = 0;
+	virtual bool SetOrientation(int32_t orientation) = 0;
+	virtual int32_t GetOrientation() const = 0;
+	virtual bool SetPageSize(int32_t value) = 0;
+};
+
 // The city's vehicle, aircraft and watercraft managers, which the pinned cISC4City returns as plain pointers. Only the
 // methods up to IsDrivingMode are declared, in the order of the current gzcom-dll's cISC4AutomataManager.h.
 class cISC4AutomataManager : public cIGZUnknown

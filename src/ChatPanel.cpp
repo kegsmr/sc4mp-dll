@@ -45,14 +45,20 @@ static constexpr uint32_t kMinimizeButtonID = 0x7B3E9A6A;
 static constexpr uint32_t kStatusTipID = 0x7B3E9A90;	// a see-through button over the status icon, for its tooltip
 
 // The minimized panel, a button in the corner with the status icon and unread count on it
-static constexpr uint32_t kChipID = 0x7B3E9AA0;
-static constexpr uint32_t kChipTextID = 0x7B3E9AA1;
-static constexpr uint32_t kChipIconOffset = 0x10;	// each status icon on the chip has the ID of the title bar's one plus this
-static constexpr int32_t kChipWidth = 88;
-static constexpr int32_t kChipHeight = 32;
+static constexpr uint32_t kChipID = 0x7B3E9AA0;	// the round button, under the status ring and the speech bubble
+static constexpr uint32_t kChipCountID = 0x7B3E9AA1;	// the unread count, on the red bubble
+static constexpr uint32_t kChipCountBubbleID = 0x7B3E9AA9;
+static constexpr uint32_t kChipBubbleID = 0x7B3E9AAA;	// the game's speech bubble, a button too, so it's clickable and lights up
+static constexpr uint32_t kChipIconOffset = 0x10;	// each status ring on the chip has the ID of the title bar's icon plus this
+static constexpr int32_t kChipWidth = 56;	// the 50 pixel button, with room for the count bubble over its top right
+static constexpr int32_t kChipHeight = 56;
 static constexpr int32_t kTitleBandHeight = 34;	// the frame's title band, by which the panel is dragged
-static constexpr int32_t kChipRightMargin = 12;
-static constexpr int32_t kChipBottomMargin = 48;	// above the city view's news ticker
+static constexpr int32_t kRightMargin = 12;			// the chip and the open panel are in the view's top right corner
+static constexpr int32_t kRegionTop = 66;			// below the region view's top bar and its round buttons ("..." etc.)
+static constexpr int32_t kCityTop = 16;
+static constexpr int32_t kChipBottomMargin = 48;	// above the city view's news ticker, if the chip is moved to the bottom
+static constexpr ULONGLONG kChipCheckInterval = 250;	// how often the chip checks whether a window of the game covers it
+static constexpr ULONGLONG kChipMoveDelay = 500;	// how long that has to stay so before the chip moves, so it doesn't flicker
 
 // The launcher's colors for player names (CHAT_NAME_COLORS in sc4mpclient.py), in the same order, as the name windows in the UI script have them.
 // A few are a little darker than the launcher's, to read on the panel's background. The launcher sends a name's color, and the nearest of these is used.
@@ -73,7 +79,7 @@ static constexpr uint8_t kNameColors[][3] = {
 static constexpr int kNameColorCount = static_cast<int>(std::size(kNameColors));
 
 // The panel's buttons, of which only the shown ones can be clicked
-static constexpr uint32_t kButtonIDs[] = { kMinimizeButtonID, kChatButtonID, kChipID, kFieldID };	// the field is clicked to type
+static constexpr uint32_t kButtonIDs[] = { kMinimizeButtonID, kChatButtonID, kChipID, kChipBubbleID, kFieldID, kNewHintTextID };	// the field is clicked to type
 
 // Windows in the title bar, shown unless the panel is minimized
 static constexpr uint32_t kTitleBarIDs[] = { kTitleID, kStatusTipID, kMinimizeButtonID };
@@ -92,7 +98,13 @@ static constexpr std::pair<const char*, uint32_t> kStatusIcons[] = {
 };
 
 static constexpr size_t kLineCount = 8;
-static constexpr size_t kLineLength = 48;			// characters that fit on a line, roughly, since the font isn't monospaced
+static constexpr size_t kMaxLines = 200;			// rows kept to scroll back through, wrapped rows included
+static constexpr int kWheelRows = 3;				// rows scrolled per notch of the mouse wheel
+static constexpr int32_t kScrollArrowSize = 16;		// the game's scrollbar's arrows, at each end
+static constexpr uint32_t kScrollbarID = 0x7B3E9A6B;
+static constexpr uint32_t kNewHintID = 0x7B3E9A6C;		// "N new below", while the player has scrolled up
+static constexpr uint32_t kNewHintTextID = 0x7B3E9A6D;
+static constexpr size_t kLineLength = 44;			// characters that fit on a line, roughly, since the font isn't monospaced
 static constexpr int32_t kInputWidth = 276;			// the input's text window, less its gutters; the end of a longer message is shown while typing it
 static constexpr size_t kMaxInputLength = 200;
 static constexpr size_t kMaxInbox = 100;
@@ -265,9 +277,12 @@ void ChatPanel::Stop()
 	started = false;
 }
 
-void ChatPanel::Attach(cIGZWin* pNewParent)
+void ChatPanel::Attach(cIGZWin* pNewParent, bool region)
 {
 	Detach();
+	regionView = region;
+	chipSpot = ChipSpot::Home;
+	wantedChipSpot = ChipSpot::Home;
 
 	if (!started || !pNewParent)
 	{
@@ -464,6 +479,8 @@ bool ChatPanel::OnTick(uint32_t unknown1)
 		Layout();
 	}
 
+	AvoidCoveringWindows();
+
 	if (!received.empty())
 	{
 		for (const Notice& notice : received)
@@ -505,7 +522,11 @@ bool ChatPanel::Click(uint32_t buttonID)
 		}
 		SetMinimized(true);
 		return true;
+	case kNewHintTextID:
+		ScrollToBottom();
+		return true;
 	case kChipID:
+	case kChipBubbleID:
 		SetMinimized(false);
 		return true;
 	case kFieldID:
@@ -537,7 +558,7 @@ LRESULT ChatPanel::FilterMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 
 	if (uMsg >= WM_MOUSEFIRST && uMsg <= WM_MOUSELAST)
 	{
-		handled = HandleMouse(hWnd, uMsg, lParam);
+		handled = HandleMouse(hWnd, uMsg, wParam, lParam);
 	}
 	else if (typing)
 	{
@@ -562,7 +583,7 @@ LRESULT ChatPanel::FilterMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 // The views pick the region tile or city lot under the cursor from the game window's own mouse messages,
 // whichever window the game's window manager then gives them to, so a click on the panel also clicked the map.
 // So the mouse buttons on the panel are taken here, before the game sees them, and the panel does the clicked button itself.
-bool ChatPanel::HandleMouse(HWND hWnd, UINT uMsg, LPARAM lParam)
+bool ChatPanel::HandleMouse(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	POINT point{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
 	uint32_t button = 0;
@@ -596,12 +617,36 @@ bool ChatPanel::HandleMouse(HWND hWnd, UINT uMsg, LPARAM lParam)
 		break;
 	case WM_MOUSEWHEEL:
 	case WM_MOUSEHWHEEL:
-		// So the wheel doesn't zoom the map under the panel. Its position is on the screen, unlike the buttons'.
-		return ScreenToClient(hWnd, &point) && IsOnPanel(point.x, point.y);
+		// So the wheel doesn't zoom the map under the panel, and scrolls the chat instead. Its position is on the screen,
+		// unlike the buttons'.
+		if (!ScreenToClient(hWnd, &point) || !IsOnPanel(point.x, point.y))
+		{
+			return false;
+		}
+		if (uMsg == WM_MOUSEWHEEL && !minimized)
+		{
+			int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+			int rows = delta * kWheelRows / WHEEL_DELTA;
+			if (rows == 0 && delta > 0)
+			{
+				rows = 1;	// a touchpad's small steps
+			}
+			else if (rows == 0 && delta < 0)
+			{
+				rows = -1;
+			}
+			ScrollBy(rows);
+		}
+		return true;
 	case WM_MOUSEMOVE:
 		if (dragging)
 		{
 			Drag(point.x, point.y);
+			return true;
+		}
+		if (scrollDragging)
+		{
+			PressScrollbar(point.y, false);
 			return true;
 		}
 		return false;	// moving is left to the game, which shows the buttons' tooltips and hover art
@@ -643,6 +688,14 @@ bool ChatPanel::HandleMouse(HWND hWnd, UINT uMsg, LPARAM lParam)
 		if (clicked)
 		{
 			Click(clicked);
+		}
+		else if (!minimized && IsOnChild(kScrollbarID, point.x, point.y))
+		{
+			// The game's scrollbar never sees the press, so it's done here
+			PressScrollbar(point.y, true);
+			scrollDragging = true;
+			SetCapture(hWnd);
+			dragCapture = hWnd;
 		}
 		else
 		{
@@ -708,7 +761,108 @@ void ChatPanel::StopDragging()
 	}
 
 	dragging = false;
+	scrollDragging = false;
 	dragCapture = nullptr;
+}
+
+size_t ChatPanel::GetMaxScroll() const
+{
+	if (lines.size() <= kLineCount)
+	{
+		return 0;
+	}
+	return lines.size() - kLineCount;
+}
+
+// Scrolls the chat by `rows`, back to older lines if positive
+void ChatPanel::ScrollBy(int rows)
+{
+	int64_t scrolled = static_cast<int64_t>(scrollRows) + rows;
+	if (scrolled < 0)
+	{
+		scrolled = 0;
+	}
+	if (scrolled > static_cast<int64_t>(GetMaxScroll()))
+	{
+		scrolled = static_cast<int64_t>(GetMaxScroll());
+	}
+
+	scrollRows = static_cast<size_t>(scrolled);
+	if (scrollRows == 0)
+	{
+		newBelow = 0;
+	}
+
+	ShowLines();
+}
+
+void ChatPanel::ScrollToBottom()
+{
+	scrollRows = 0;
+	newBelow = 0;
+	ShowLines();
+}
+
+// A press (or a drag, if not `press`) on the game's scrollbar at `y` in the game window: its arrows scroll a row, and its
+// track jumps to that place
+void ChatPanel::PressScrollbar(int32_t y, bool press)
+{
+	cIGZWin* pScrollbar = pWin->GetChildWindowFromID(kScrollbarID);
+	if (!pScrollbar)
+	{
+		return;
+	}
+
+	int32_t left = 0;
+	int32_t top = 0;
+	GetPanelOrigin(left, top);
+	int32_t inside = y - top - pScrollbar->GetT();
+	int32_t track = pScrollbar->GetH() - 2 * kScrollArrowSize;
+
+	if (inside < kScrollArrowSize)
+	{
+		if (press)
+		{
+			ScrollBy(1);
+		}
+		return;
+	}
+	if (inside >= pScrollbar->GetH() - kScrollArrowSize)
+	{
+		if (press)
+		{
+			ScrollBy(-1);
+		}
+		return;
+	}
+	if (track <= 0)
+	{
+		return;
+	}
+
+	// The top of the track is the oldest line
+	int64_t maxScroll = static_cast<int64_t>(GetMaxScroll());
+	int64_t fromTop = (static_cast<int64_t>(inside - kScrollArrowSize) * maxScroll + track / 2) / track;
+	ScrollBy(static_cast<int>(maxScroll - fromTop - static_cast<int64_t>(scrollRows)));
+}
+
+// Sets the game's scrollbar to the shown lines, and the hint for new lines below them
+void ChatPanel::ShowScroll(bool open)
+{
+	cRZAutoRefCount<cIGZWinScrollbar> pScrollbar;
+	if (pWin->GetChildAs(kScrollbarID, kGZIID_cIGZWinScrollbar, pScrollbar.AsPPVoid()))
+	{
+		int32_t maxScroll = static_cast<int32_t>(GetMaxScroll());
+		pScrollbar->SetMinMax(0, maxScroll);
+		pScrollbar->SetPageSize(static_cast<int32_t>(kLineCount));
+		pScrollbar->SetValue(maxScroll - static_cast<int32_t>(scrollRows));
+	}
+	SetChildVisible(kScrollbarID, open);
+
+	bool hint = open && scrollRows > 0 && newBelow > 0;
+	SetText(kNewHintTextID, std::to_string(newBelow) + " new below");
+	SetChildVisible(kNewHintID, hint);
+	SetChildVisible(kNewHintTextID, hint);
 }
 
 // Keeps the open panel's place inside its view
@@ -841,6 +995,14 @@ bool ChatPanel::HandleTypingKey(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		{
 			Send();
 		}
+		else if (wParam == VK_PRIOR)
+		{
+			ScrollBy(static_cast<int>(kLineCount) - 1);
+		}
+		else if (wParam == VK_NEXT)
+		{
+			ScrollBy(1 - static_cast<int>(kLineCount));
+		}
 		else if (wParam == VK_ESCAPE)
 		{
 			StopTyping();
@@ -950,6 +1112,7 @@ void ChatPanel::Send()
 {
 	std::string text = Trim(Text::WideToUtf8(input));
 	StopTyping();
+	ScrollToBottom();	// to see it arrive
 
 	if (text.empty())
 	{
@@ -1052,6 +1215,7 @@ void ChatPanel::AddLine(const Notice& notice)
 
 	std::string namePrefix = notice.name + ":";
 	bool first = true;
+	size_t before = lines.size();
 
 	// Alerts can have several lines
 	size_t start = 0;
@@ -1094,9 +1258,20 @@ void ChatPanel::AddLine(const Notice& notice)
 		start = end + 1;
 	}
 
-	while (lines.size() > kLineCount)
+	// While the player has scrolled up, the lines they're reading stay put, and the new ones are counted below
+	if (scrollRows > 0 && lines.size() > before)
+	{
+		scrollRows += lines.size() - before;
+		newBelow++;
+	}
+
+	while (lines.size() > kMaxLines)
 	{
 		lines.pop_front();
+	}
+	if (scrollRows > GetMaxScroll())
+	{
+		scrollRows = GetMaxScroll();
 	}
 
 	if (!notice.history && minimized)
@@ -1111,6 +1286,8 @@ void ChatPanel::SetMinimized(bool value)
 	if (!minimized)
 	{
 		unread = 0;
+		scrollRows = 0;	// reopened at the newest lines
+		newBelow = 0;
 	}
 
 	Layout();
@@ -1135,7 +1312,7 @@ void ChatPanel::Layout()
 		SetChildVisible(id, !minimized);
 	}
 	SetChildVisible(kChipID, minimized);
-	SetChildVisible(kChipTextID, minimized);
+	SetChildVisible(kChipBubbleID, minimized);
 
 	// Shrunk too, so the empty part doesn't take clicks meant for the view under it
 	int32_t width = openWidth;
@@ -1155,9 +1332,19 @@ void ChatPanel::Layout()
 		parentHeight = pParent->GetH();
 	}
 
+	// The open panel opens in the top right corner, where the chip is, unless the player has dragged it somewhere
+	if (!moved)
+	{
+		openLeft = parentWidth - openWidth - kRightMargin;
+		openTop = GetTopMargin();
+	}
+
 	if (minimized && pParent)
 	{
-		PlaceWindow(pWin, parentWidth - kChipWidth - kChipRightMargin, parentHeight - kChipHeight - kChipBottomMargin);
+		int32_t left = 0;
+		int32_t top = 0;
+		GetChipPlace(chipSpot, left, top);
+		PlaceWindow(pWin, left, top);
 	}
 	else
 	{
@@ -1200,19 +1387,34 @@ void ChatPanel::PlaceWindow(cIGZWin* pTarget, int32_t left, int32_t top)
 // Shows the newest lines at the bottom, if the panel is open
 void ChatPanel::ShowLines()
 {
+	if (!pWin)
+	{
+		return;
+	}
+
 	bool open = !minimized;
-	size_t blank = kLineCount - lines.size();
+
+	// The rows shown end `scrollRows` above the newest line
+	size_t end = lines.size() - scrollRows;
+	size_t shown = end;
+	if (shown > kLineCount)
+	{
+		shown = kLineCount;
+	}
+	size_t blank = kLineCount - shown;
 
 	for (size_t i = 0; i < kLineCount; i++)
 	{
 		const Line* line = nullptr;
 		if (i >= blank)
 		{
-			line = &lines[i - blank];
+			line = &lines[end - shown + i - blank];
 		}
 
 		ShowLine(static_cast<uint32_t>(i), line, open);
 	}
+
+	ShowScroll(open);
 }
 
 // Shows a line in a row of the panel, or clears the row if `line` is null. Chat is in navy, after the player's name in its color,
@@ -1324,14 +1526,163 @@ void ChatPanel::ShowTitle()
 		count = "99+";
 	}
 
+	bool countShown = minimized && unread > 0;
+	SetText(kChipCountID, count);
+	SetChildVisible(kChipCountBubbleID, countShown);
+	SetChildVisible(kChipCountID, countShown);
+
+	ShowChipTip();
+}
+
+// The chip's tooltip has the save status and the unread count, eg. "Saved 14:13, 3 new"
+void ChatPanel::ShowChipTip()
+{
+	std::string tip = status.second;
 	if (unread > 0)
 	{
-		SetText(kChipTextID, count + " new");
+		if (!tip.empty())
+		{
+			tip += ", ";
+		}
+		tip += std::to_string(unread) + " new";
 	}
-	else
+	if (tip.empty())
 	{
-		SetText(kChipTextID, "Chat");
+		tip = "Chat";
 	}
+
+	SetTip(kChipID, tip);
+	SetTip(kChipBubbleID, tip);
+}
+
+int32_t ChatPanel::GetTopMargin() const
+{
+	if (regionView)
+	{
+		return kRegionTop;
+	}
+	return kCityTop;
+}
+
+// Where the chip goes in its view: home in the top right corner, just below a window of the game's that covers it
+// there, or in the bottom right corner if that one's too tall
+void ChatPanel::GetChipPlace(ChipSpot spot, int32_t& left, int32_t& top) const
+{
+	left = parentWidth - kChipWidth - kRightMargin;
+	top = GetTopMargin();
+
+	if (spot == ChipSpot::Below)
+	{
+		top = coverBottom;
+	}
+	else if (spot == ChipSpot::Corner)
+	{
+		top = parentHeight - kChipHeight - kChipBottomMargin;
+	}
+}
+
+// Returns the window of the game's that covers a place on the chip, as the view's child it belongs to, or null. Full
+// size layers (eg. the region view's map) don't count, nor do the chip's own windows.
+cIGZWin* ChatPanel::GetCoveringWindow(int32_t left, int32_t top) const
+{
+	cIGZWinMgrPtr pWinMgr;
+	if (!pWinMgr || !pParent)
+	{
+		return nullptr;
+	}
+
+	// The view's place in the game window, where the window manager's points are
+	int32_t viewLeft = 0;
+	int32_t viewTop = 0;
+	GetPanelOrigin(viewLeft, viewTop);
+	viewLeft -= pWin->GetL();
+	viewTop -= pWin->GetT();
+
+	const int32_t points[][2] = { { 6, 12 }, { kChipWidth - 6, 12 }, { kChipWidth / 2, kChipHeight / 2 }, { 6, kChipHeight - 4 }, { kChipWidth - 6, kChipHeight - 4 } };
+	for (const auto& point : points)
+	{
+		cIGZWin* pHit = pWinMgr->GetWindowFromPoint(viewLeft + left + point[0], viewTop + top + point[1]);
+
+		// Up to the view's child it's in. Hits on the view itself, or outside it, don't count.
+		cIGZWin* pTop = nullptr;
+		for (int depth = 0; pHit && depth < kMaxWinDepth; depth++)
+		{
+			if (pHit == pWin)
+			{
+				pTop = nullptr;
+				break;
+			}
+			if (pHit->GetParentWin() == pParent)
+			{
+				pTop = pHit;
+				break;
+			}
+			pHit = pHit->GetParentWin();
+		}
+
+		if (pTop && pTop->IsVisible() && (pTop->GetW() < parentWidth || pTop->GetH() < parentHeight))
+		{
+			return pTop;
+		}
+	}
+
+	return nullptr;
+}
+
+// Moves the chip out of the way of a window of the game's that covers its home (eg. the bridge picker or the tutorial),
+// and back home once it's clear. Checked a few times a second, and only moved once the new spot has been wanted for a while.
+void ChatPanel::AvoidCoveringWindows()
+{
+	if (!pWin || !pParent || !minimized)
+	{
+		return;
+	}
+
+	ULONGLONG now = GetTickCount64();
+	if (now - lastChipCheck < kChipCheckInterval)
+	{
+		return;
+	}
+	lastChipCheck = now;
+
+	int32_t homeLeft = 0;
+	int32_t homeTop = 0;
+	GetChipPlace(ChipSpot::Home, homeLeft, homeTop);
+
+	ChipSpot wanted = ChipSpot::Home;
+	int32_t wantedBottom = coverBottom;
+	cIGZWin* pCover = GetCoveringWindow(homeLeft, homeTop);
+	if (pCover)
+	{
+		wanted = ChipSpot::Corner;
+		wantedBottom = pCover->GetT() + pCover->GetH() + 8;
+		if (wantedBottom + kChipHeight <= parentHeight - kChipBottomMargin && !GetCoveringWindow(homeLeft, wantedBottom))
+		{
+			wanted = ChipSpot::Below;
+		}
+	}
+
+	if (wanted != wantedChipSpot)
+	{
+		wantedChipSpot = wanted;
+		wantedSince = now;
+	}
+
+	if (wanted == chipSpot && (wanted != ChipSpot::Below || wantedBottom == coverBottom))
+	{
+		return;
+	}
+	if (now - wantedSince < kChipMoveDelay)
+	{
+		return;
+	}
+
+	const char* const names[] = { "home, in the top right corner", "below a window of the game's that covers its home", "to the bottom right corner, since a window of the game's covers its home" };
+	Log::Line(std::string("Moved the chat chip ") + names[static_cast<int>(wanted)]);
+
+	chipSpot = wanted;
+	coverBottom = wantedBottom;
+	Layout();
 }
 
 // Shows the launcher's save status in the title bar, or on the chip when minimized
@@ -1364,6 +1715,7 @@ void ChatPanel::ShowStatus()
 	}
 
 	SetTip(kStatusTipID, text);
+	ShowChipTip();
 }
 
 void ChatPanel::SetText(uint32_t id, const std::string& text)

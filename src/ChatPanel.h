@@ -35,7 +35,7 @@ public:
 	void Stop();
 
 	// Shows the panel in a view's window (the region screen or the city's 3D view), removing it from the previous view
-	void Attach(cIGZWin* pNewParent);
+	void Attach(cIGZWin* pNewParent, bool region);
 	void Detach();
 
 	// Opens the panel with the cursor in the text box, eg. for the `say` cheat code without a message
@@ -63,7 +63,7 @@ private:
 	LRESULT FilterMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, bool& handled) override;
 
 	bool Click(uint32_t buttonID);
-	bool HandleMouse(HWND hWnd, UINT uMsg, LPARAM lParam);
+	bool HandleMouse(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 	bool IsOnPanel(int32_t x, int32_t y);
 	void GetPanelOrigin(int32_t& left, int32_t& top) const;
 	uint32_t GetButtonAt(int32_t x, int32_t y) const;
@@ -108,6 +108,24 @@ private:
 	void ShowStatus();
 	void SetText(uint32_t id, const std::string& text);
 	void SetTip(uint32_t id, const std::string& text);
+	void ShowChipTip();
+	size_t GetMaxScroll() const;
+	void ScrollBy(int rows);
+	void ScrollToBottom();
+	void PressScrollbar(int32_t y, bool press);
+	void ShowScroll(bool open);
+
+	enum class ChipSpot
+	{
+		Home,	// the view's top right corner
+		Below,	// just below a window of the game's that covers home
+		Corner,	// the bottom right corner, if that one is too tall
+	};
+
+	int32_t GetTopMargin() const;
+	void GetChipPlace(ChipSpot spot, int32_t& left, int32_t& top) const;
+	cIGZWin* GetCoveringWindow(int32_t left, int32_t top) const;
+	void AvoidCoveringWindows();
 	void SetChildVisible(uint32_t id, bool visible);
 	bool SetKeyFilter(bool add);
 
@@ -124,8 +142,15 @@ private:
 	int32_t openHeight = 0;
 	int32_t parentWidth = 0;	// the view's size when the panel was last placed in its corner
 	int32_t parentHeight = 0;
+	bool regionView = false;	// in the region view, the top right corner is below its top bar
+	ChipSpot chipSpot = ChipSpot::Home;
+	ChipSpot wantedChipSpot = ChipSpot::Home;
+	ULONGLONG wantedSince = 0;	// when the chip first wanted to move to wantedChipSpot
+	ULONGLONG lastChipCheck = 0;
+	int32_t coverBottom = 0;	// the chip's top while it's below a covering window
 	bool moved = false;	// the player dragged the open panel, to openLeft and openTop, which are kept while the game runs
 	bool dragging = false;
+	bool scrollDragging = false;	// the player holds the mouse on the scrollbar's track
 	int32_t dragX = 0;	// where the panel was grabbed, from its top left corner
 	int32_t dragY = 0;
 	HWND dragCapture = nullptr;
@@ -137,7 +162,9 @@ private:
 	std::optional<std::pair<std::string, std::string>> pendingStatus;
 	std::optional<std::string> pendingServerName;
 
-	std::deque<Line> lines;	// the lines shown, oldest first
+	std::deque<Line> lines;	// the last kMaxLines rows, oldest first
+	size_t scrollRows = 0;	// how far the player has scrolled up from the newest row
+	size_t newBelow = 0;	// messages that came while scrolled up
 	std::wstring input;
 	bool typing = false;
 	bool minimized = true;	// only a small button in the bottom right corner is shown, as when the game starts

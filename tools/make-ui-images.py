@@ -22,7 +22,6 @@ SCALE = 4
 
 # The game's UI colours, from its panel frames ({46a006b0,144161ee}) and its text (forecolor in its UI scripts)
 OUTLINE = (57, 68, 114)
-HALO = (208, 215, 221)
 STEEL = (156, 178, 194)
 INSET = (218, 224, 229)
 TEXT = (63, 73, 103)
@@ -47,7 +46,8 @@ TILE_UNCLAIMED = (92, 151, 190)
 
 # The layout, which must match ui/ChatPanel.ui
 FIELD_SIZE = (290, 26)
-CHIP_SIZE = (88, 32)
+CHIP_BUTTON_SIZE = 50
+HINT_SIZE = (84, 18)
 STATUS_SIZE = 14
 TITLE_BUTTON_SIZE = (22, 20)	# like the game's
 
@@ -92,34 +92,64 @@ def finish(image):
 	return image.resize((image.width // SCALE, image.height // SCALE), Image.LANCZOS)
 
 
-def draw_frame(width, height, face=STEEL, rim=None):
-	"""Draws a plain steel frame at the exact size of its window, like the game's {46a006b0,144161e4}: a soft pale halo,
-	a navy outline and a steel face, with a light `rim` inside the outline if given. For the chip, which is too small to
-	stretch the game's own frame."""
+def draw_round_button():
+	"""Draws the minimized panel's round button in four frames, at 50 pixels, in the style of the game's round buttons (eg.
+	{46a006b0,cbcb6e9b}, which is 88 pixels and can't be scaled in game): a navy disc in a silver ring, with a soft shadow.
+	The status ring, the speech bubble and the unread count are windows on top."""
 
-	image = Image.new("RGBA", (width * SCALE, height * SCALE))
-	draw = ImageDraw.Draw(image)
-	draw.rounded_rectangle(scaled(0, 0, width - 1, height - 1), 11 * SCALE, fill=HALO + (128,), outline=OUTLINE + (128,), width=SCALE)
-	draw.rounded_rectangle(scaled(5, 5, width - 6, height - 6), 6 * SCALE, fill=face + (255,), outline=OUTLINE + (255,), width=SCALE)
-	if rim:
-		draw.rounded_rectangle(scaled(6, 6, width - 7, height - 7), 5 * SCALE, outline=rim + (255,), width=SCALE)
+	size = CHIP_BUTTON_SIZE
+	discs = {"disabled": ((120, 124, 134), (96, 100, 110)), "normal": ((84, 104, 160), (58, 74, 119)), "pressed": ((58, 74, 119), (70, 89, 143)), "hover": ((104, 126, 186), (70, 89, 143))}
+
+	strip = Image.new("RGBA", (size * len(STATES), size))
+	for i, state in enumerate(STATES):
+		top, bottom = discs[state]
+		frame = Image.new("RGBA", (size * SCALE, size * SCALE))
+
+		# Pressed, it sinks onto its shadow
+		drop = 0
+		if state == "pressed":
+			drop = 1
+		else:
+			shadow = Image.new("RGBA", frame.size)
+			ImageDraw.Draw(shadow).ellipse(scaled(3, 4, size - 2, size - 1), fill=(0, 0, 0, 110))
+			frame.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(1.5 * SCALE)))
+
+		# The silver ring, lit from the top left
+		ring = gradient(frame.size, (247, 255, 255), (150, 160, 172))
+		mask = Image.new("L", frame.size, 0)
+		ImageDraw.Draw(mask).ellipse(scaled(1, 1 + drop, size - 3, size - 3 + drop), fill=255)
+		ring.putalpha(mask)
+		frame.alpha_composite(ring)
+		draw = ImageDraw.Draw(frame)
+		draw.ellipse(scaled(1, 1 + drop, size - 3, size - 3 + drop), outline=(32, 41, 66, 255), width=SCALE)
+
+		# The navy disc, darker at its top edge like the game's
+		disc = gradient(frame.size, top, bottom)
+		mask = Image.new("L", frame.size, 0)
+		ImageDraw.Draw(mask).ellipse(scaled(5, 5 + drop, size - 7, size - 7 + drop), fill=255)
+		disc.putalpha(mask)
+		frame.alpha_composite(disc)
+		draw.ellipse(scaled(5, 5 + drop, size - 7, size - 7 + drop), outline=(32, 41, 66, 255), width=SCALE)
+		strip.paste(finish(frame), (i * size, 0))
+	return strip
+
+
+def draw_ring(colour):
+	"""Draws the round button's status ring, inside its silver one, in a status colour."""
+
+	size = CHIP_BUTTON_SIZE
+	image = Image.new("RGBA", (size * SCALE, size * SCALE))
+	ImageDraw.Draw(image).ellipse(scaled(5, 5, size - 7, size - 7), outline=colour + (255,), width=3 * SCALE)
 	return finish(image)
 
 
-def draw_chip():
-	"""Draws the minimized panel's button, a small title bar, in four frames. Its icon and text are windows on top."""
+def draw_count_bubble():
+	"""Draws the red bubble for the chip's unread count, which is a text window on top of it."""
 
-	width, height = CHIP_SIZE
-	frames = [
-		draw_frame(width, height, face=(176, 182, 188)),	# disabled
-		draw_frame(width, height),	# normal
-		draw_frame(width, height, face=(136, 158, 176)),	# pressed
-		draw_frame(width, height, face=(176, 196, 210), rim=(236, 242, 246)),	# hover
-	]
-	strip = Image.new("RGBA", (width * len(frames), height))
-	for i, frame in enumerate(frames):
-		strip.paste(frame, (i * width, 0))
-	return strip
+	size = 20
+	image = Image.new("RGBA", (size * SCALE, size * SCALE))
+	ImageDraw.Draw(image).ellipse(scaled(0, 0, size - 1, size - 1), fill=RED + (255,), outline=OUTLINE + (255,), width=SCALE)
+	return finish(image)
 
 
 def draw_field(active):
@@ -144,6 +174,15 @@ def draw_status_tip():
 	"""Draws a see-through button the size of a status icon, in four frames, which is over the icon for its tooltip."""
 
 	return Image.new("RGBA", (STATUS_SIZE * len(STATES), STATUS_SIZE))
+
+
+def draw_hint():
+	"""Draws the small inset behind the "N new below" hint, shown while the player has scrolled up."""
+
+	width, height = HINT_SIZE
+	image = Image.new("RGBA", (width * SCALE, height * SCALE))
+	ImageDraw.Draw(image).rounded_rectangle(scaled(0, 0, width - 1, height - 1), 4 * SCALE, fill=INSET + (255,), outline=OUTLINE + (255,), width=SCALE)
+	return finish(image)
 
 
 def draw_title_button(draw_icon):
@@ -249,7 +288,14 @@ def make_images():
 		"chat-field.png": draw_field(active=False),
 		"chat-field-typing.png": draw_field(active=True),
 		"chat-minimize.png": draw_title_button(minimize_arrow),
-		"chat-chip.png": draw_chip(),
+		"chat-chip.png": draw_round_button(),
+		"chat-count.png": draw_count_bubble(),
+		"chat-hint.png": draw_hint(),
+		"ring-green.png": draw_ring(GREEN),
+		"ring-blue.png": draw_ring(BLUE),
+		"ring-amber.png": draw_ring(AMBER),
+		"ring-red.png": draw_ring(RED),
+		"ring-grey.png": draw_ring(GREY),
 		"status-tip.png": draw_status_tip(),
 		"status-saved.png": draw_status(GREEN, "check"),
 		"status-saving.png": draw_status(BLUE, "arrows"),
