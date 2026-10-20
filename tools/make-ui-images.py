@@ -47,8 +47,9 @@ TILE_UNCLAIMED = (92, 151, 190)
 
 # The layout, which must match ui/ChatPanel.ui
 COLLAPSED_SIZE = (366, 42)
-FIELD_SIZE = (172, 26)
-PILL_SIZE = (118, 20)
+FIELD_SIZE = (290, 26)
+CHIP_SIZE = (88, 32)
+STATUS_SIZE = 14
 TITLE_BUTTON_SIZE = (22, 20)	# like the game's
 
 STATES = ("disabled", "normal", "pressed", "hover")
@@ -92,15 +93,34 @@ def finish(image):
 	return image.resize((image.width // SCALE, image.height // SCALE), Image.LANCZOS)
 
 
-def draw_frame(width, height):
+def draw_frame(width, height, face=STEEL, rim=None):
 	"""Draws a plain steel frame at the exact size of its window, like the game's {46a006b0,144161e4}: a soft pale halo,
-	a navy outline and a steel face. Only for the collapsed panel, which is too short to stretch the game's own frame."""
+	a navy outline and a steel face, with a light `rim` inside the outline if given. For the collapsed panel and the chip,
+	which are too small to stretch the game's own frame."""
 
 	image = Image.new("RGBA", (width * SCALE, height * SCALE))
 	draw = ImageDraw.Draw(image)
 	draw.rounded_rectangle(scaled(0, 0, width - 1, height - 1), 11 * SCALE, fill=HALO + (128,), outline=OUTLINE + (128,), width=SCALE)
-	draw.rounded_rectangle(scaled(5, 5, width - 6, height - 6), 6 * SCALE, fill=STEEL + (255,), outline=OUTLINE + (255,), width=SCALE)
+	draw.rounded_rectangle(scaled(5, 5, width - 6, height - 6), 6 * SCALE, fill=face + (255,), outline=OUTLINE + (255,), width=SCALE)
+	if rim:
+		draw.rounded_rectangle(scaled(6, 6, width - 7, height - 7), 5 * SCALE, outline=rim + (255,), width=SCALE)
 	return finish(image)
+
+
+def draw_chip():
+	"""Draws the minimized panel's button, a small title bar, in four frames. Its icon and text are windows on top."""
+
+	width, height = CHIP_SIZE
+	frames = [
+		draw_frame(width, height, face=(176, 182, 188)),	# disabled
+		draw_frame(width, height),	# normal
+		draw_frame(width, height, face=(136, 158, 176)),	# pressed
+		draw_frame(width, height, face=(176, 196, 210), rim=(236, 242, 246)),	# hover
+	]
+	strip = Image.new("RGBA", (width * len(frames), height))
+	for i, frame in enumerate(frames):
+		strip.paste(frame, (i * width, 0))
+	return strip
 
 
 def draw_field(active):
@@ -121,13 +141,10 @@ def draw_field(active):
 	return finish(image)
 
 
-def draw_pill():
-	"""Draws the small inset behind the save status. The icon and text are separate windows on top of it."""
+def draw_status_tip():
+	"""Draws a see-through button the size of a status icon, in four frames, which is over the icon for its tooltip."""
 
-	width, height = PILL_SIZE
-	image = Image.new("RGBA", (width * SCALE, height * SCALE))
-	ImageDraw.Draw(image).rounded_rectangle(scaled(0, 0, width - 1, height - 1), 4 * SCALE, fill=INSET + (255,), outline=OUTLINE + (255,), width=SCALE)
-	return finish(image)
+	return Image.new("RGBA", (STATUS_SIZE * len(STATES), STATUS_SIZE))
 
 
 def draw_badge():
@@ -243,8 +260,9 @@ def make_images():
 		"chat-field.png": draw_field(active=False),
 		"chat-field-typing.png": draw_field(active=True),
 		"chat-minimize.png": draw_title_button(minimize_arrow),
+		"chat-chip.png": draw_chip(),
 		"chat-badge.png": draw_badge(),
-		"status-pill.png": draw_pill(),
+		"status-tip.png": draw_status_tip(),
 		"status-saved.png": draw_status(GREEN, "check"),
 		"status-saving.png": draw_status(BLUE, "arrows"),
 		"status-failed.png": draw_status(RED, "cross"),

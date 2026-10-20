@@ -62,6 +62,7 @@ private:
 	bool IsOnDialog(int32_t x, int32_t y) const;
 	void GetOrigin(int32_t& left, int32_t& top) const;
 	uint32_t GetButtonAt(int32_t x, int32_t y) const;
+	void ShowOwner(const std::string& text);
 	void SetText(uint32_t id, const std::string& text);
 	bool SetMouseFilter(bool add);
 

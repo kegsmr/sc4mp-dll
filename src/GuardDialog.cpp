@@ -18,6 +18,8 @@
 #include "GZServPtrs.h"
 #include "SC4UI.h"
 
+#include <iterator>
+#include <vector>
 #include <windowsx.h>
 
 // A random ID, which must not be used by any other plugin
@@ -27,31 +29,72 @@ static constexpr uint32_t kGuardDialogServiceID = 0x7B3E9AC0;
 static constexpr uint32_t kDialogGroup = 0xC0E6A1C5;
 static constexpr uint32_t kDialogInstance = 0x5D2C7E43;
 static constexpr uint32_t kDialogID = 0x7B3E9AC1;
-static constexpr uint32_t kOwnerLineID = 0x7B3E9AC4;
+static constexpr uint32_t kSignID = 0x7B3E9ACA;
 static constexpr uint32_t kBackButtonID = 0x7B3E9AC7;
 static constexpr uint32_t kStayButtonID = 0x7B3E9AC9;
 
 static constexpr uint32_t kButtonIDs[] = { kBackButtonID, kStayButtonID };
 
-static constexpr int32_t kLineWidth = 284;	// the owner line's text window (in GenBodyMedium), less its gutters
+// "<city> belongs to <owner>." wraps onto as many of these lines as it needs, and the windows below it move down
+static constexpr uint32_t kOwnerLineIDs[] = { 0x7B3E9AC4, 0x7B3E9AD0, 0x7B3E9AD1, 0x7B3E9AD2, 0x7B3E9AD3, 0x7B3E9AD4 };
+static constexpr uint32_t kBelowOwnerIDs[] = { 0x7B3E9AC5, 0x7B3E9AC6, kBackButtonID, kStayButtonID };
+static constexpr int32_t kLineWidth = 284;	// the owner lines' text windows (in GenBodyMedium), less their gutters
+static constexpr int32_t kLineHeight = 18;
 
 static constexpr uint32_t kGZWinMessageCommand = 3;
 static constexpr uint32_t kGZWinCommandButtonClicked = 0x287259F6;
 static constexpr int kMaxWinDepth = 32;	// in case a window's parent chain loops
 
-// Returns "<city> belongs to <owner>.", shortening the names only if the line doesn't fit. The city gets what the owner's
-// name leaves, but at least half the line, so a very long owner name is shortened too.
-static std::string OwnerLine(const std::string& city, const std::string& owner)
+// Splits text into lines that fit `width` pixels, breaking at spaces, and inside a word only if it's longer than a line
+static std::vector<std::wstring> WrapToWidth(const std::wstring& text, int32_t width)
 {
-	int32_t cityWidth = kLineWidth - Text::EstimateWidth(Text::Utf8ToWide(" belongs to " + owner + "."));
-	if (cityWidth < kLineWidth / 2)
-	{
-		cityWidth = kLineWidth / 2;
-	}
-	std::string shownCity = Text::ShortenToWidth(city, cityWidth, 8);
+	std::vector<std::wstring> lines;
+	std::wstring line;
+	size_t start = 0;
 
-	int32_t ownerWidth = kLineWidth - Text::EstimateWidth(Text::Utf8ToWide(shownCity + " belongs to ."));
-	return shownCity + " belongs to " + Text::ShortenToWidth(owner, ownerWidth, 8) + ".";
+	while (start < text.size())
+	{
+		size_t end = text.find(L' ', start);
+		if (end == std::wstring::npos)
+		{
+			end = text.size();
+		}
+		std::wstring word = text.substr(start, end - start);
+		start = end + 1;
+
+		std::wstring joined = word;
+		if (!line.empty())
+		{
+			joined = line + L" " + word;
+		}
+		if (Text::EstimateWidth(joined) <= width)
+		{
+			line = joined;
+			continue;
+		}
+
+		if (!line.empty())
+		{
+			lines.push_back(line);
+		}
+		while (word.size() > 1 && Text::EstimateWidth(word) > width)
+		{
+			size_t fit = 1;
+			while (fit < word.size() && Text::EstimateWidth(word.substr(0, fit + 1)) <= width)
+			{
+				fit++;
+			}
+			lines.push_back(word.substr(0, fit));
+			word = word.substr(fit);
+		}
+		line = word;
+	}
+
+	if (!line.empty())
+	{
+		lines.push_back(line);
+	}
+	return lines;
 }
 
 GuardDialog::GuardDialog()
@@ -263,7 +306,7 @@ void GuardDialog::Show(const Warning& warning)
 		pWinGen->SetWinProc(this);
 	}
 
-	SetText(kOwnerLineID, OwnerLine(warning.city, warning.owner));
+	ShowOwner(warning.city + " belongs to " + warning.owner + ".");
 
 	// Centered in the view. The pinned gzcom-dll's GZWinMoveTo moves by an offset (see GZWinInterfaces.h).
 	int32_t dx = (pParent->GetW() - pWin->GetW()) / 2 - pWin->GetL();
@@ -459,6 +502,67 @@ uint32_t GuardDialog::GetButtonAt(int32_t x, int32_t y) const
 	}
 
 	return 0;
+}
+
+// Shows "<city> belongs to <owner>." in full, on as many lines as it needs, and grows the dialog to fit. Names are
+// never shortened: the game allows long city names (up to 128 characters), and the line is the player's only way to
+// tell which city it is.
+void GuardDialog::ShowOwner(const std::string& text)
+{
+	std::vector<std::wstring> lines = WrapToWidth(Text::Utf8ToWide(text), kLineWidth);
+	size_t count = std::size(kOwnerLineIDs);
+
+	// Six lines take any city name the game allows, but just in case, the rest goes on the last line
+	while (lines.size() > count)
+	{
+		lines[count - 1] += L" " + lines[count];
+		lines.erase(lines.begin() + count);
+	}
+
+	for (size_t i = 0; i < count; i++)
+	{
+		cIGZWin* pLine = pWin->GetChildWindowFromID(kOwnerLineIDs[i]);
+		if (!pLine)
+		{
+			continue;
+		}
+
+		if (i < lines.size())
+		{
+			SetText(kOwnerLineIDs[i], Text::WideToUtf8(lines[i]));
+			pLine->ShowWindow();
+		}
+		else
+		{
+			pLine->HideWindow();
+		}
+	}
+
+	if (lines.size() <= 1)
+	{
+		return;
+	}
+
+	// The pinned gzcom-dll's GZWinMoveTo moves a window by an offset (see GZWinInterfaces.h). The frame is an edge
+	// image, so its inset grows with the dialog.
+	int32_t grow = static_cast<int32_t>(lines.size() - 1) * kLineHeight;
+	for (uint32_t id : kBelowOwnerIDs)
+	{
+		cIGZWin* pBelow = pWin->GetChildWindowFromID(id);
+		if (pBelow)
+		{
+			pBelow->GZWinMoveTo(0, grow);
+		}
+	}
+
+	// The sign stays in the middle of the message
+	cIGZWin* pSign = pWin->GetChildWindowFromID(kSignID);
+	if (pSign)
+	{
+		pSign->GZWinMoveTo(0, grow / 2);
+	}
+
+	pWin->SetH(pWin->GetH() + grow);
 }
 
 void GuardDialog::SetText(uint32_t id, const std::string& text)
