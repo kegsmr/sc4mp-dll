@@ -16,6 +16,9 @@
 #include "GZServPtrs.h"
 #include "SC4UI.h"
 
+#include <cwchar>
+#include <iterator>
+#include <sstream>
 #include <vector>
 #include <windowsx.h>
 
@@ -36,6 +39,9 @@ static constexpr uint32_t kCollapsedBackgroundID = 0x7B3E9A67;
 static constexpr uint32_t kFieldID = 0x7B3E9A68;
 static constexpr uint32_t kTypingFieldID = 0x7B3E9A69;
 static constexpr uint32_t kFirstLineID = 0x7B3E9A70;
+static constexpr uint32_t kFirstInfoLineID = 0x7B3E9AB0;	// the same lines in grey, for lines that aren't chat
+static constexpr uint32_t kFirstNameID = 0x7B3E9B00;		// a window for each line and name color, at kFirstNameID + line * kNameLineStep + color
+static constexpr uint32_t kNameLineStep = 0x10;
 static constexpr uint32_t kInputID = 0x7B3E9A80;
 static constexpr uint32_t kChatButtonID = 0x7B3E9A81;
 static constexpr uint32_t kMinimizeButtonID = 0x7B3E9A6A;
@@ -50,6 +56,24 @@ static constexpr int32_t kChipWidth = 64;
 static constexpr int32_t kChipHeight = 26;
 static constexpr int32_t kChipRightMargin = 12;
 static constexpr int32_t kChipBottomMargin = 48;	// above the city view's news ticker
+
+// The launcher's colors for player names (CHAT_NAME_COLORS in sc4mpclient.py), in the same order, as the name windows in the UI script have them.
+// A few are a little darker than the launcher's, to read on the panel's background. The launcher sends a name's color, and the nearest of these is used.
+static constexpr uint8_t kNameColors[][3] = {
+	{ 44, 120, 48 },	// residential
+	{ 21, 101, 192 },	// commercial
+	{ 153, 91, 0 },		// industrial
+	{ 106, 61, 154 },	// civic
+	{ 0, 119, 105 },	// utilities
+	{ 178, 58, 30 },	// fire
+	{ 86, 113, 29 },	// parks
+	{ 13, 71, 161 },	// water
+	{ 141, 79, 43 },	// transportation
+	{ 173, 20, 87 },	// health
+	{ 55, 71, 79 },		// police
+	{ 123, 94, 0 },		// farms
+};
+static constexpr int kNameColorCount = static_cast<int>(std::size(kNameColors));
 
 // The panel's buttons, of which only the shown ones can be clicked
 static constexpr uint32_t kButtonIDs[] = { kMinimizeButtonID, kHideButtonID, kShowButtonID, kChatButtonID, kChipID };
@@ -81,6 +105,8 @@ static constexpr size_t kMaxInputLength = 200;
 static constexpr size_t kMaxInbox = 100;
 static constexpr size_t kTitleLength = 19;			// before the title runs into the unread badge
 static constexpr size_t kStatusLength = 20;			// before the status runs out of its pill
+static constexpr size_t kNameLength = 20;			// a longer player name is shortened
+static constexpr int32_t kNameGap = 4;				// between a player's name and their message
 static constexpr int32_t kCollapsedHeight = 42;		// just the title bar (and its shadow), as in chat-panel-collapsed.png
 
 static constexpr uint32_t kGZWinMessageCommand = 3;
@@ -128,6 +154,83 @@ static std::vector<std::wstring> Wrap(const std::wstring& text)
 
 	pieces.push_back(text.substr(start));
 	return pieces;
+}
+
+// Estimates how wide text is in the chat lines' font. The pinned gzcom-dll has no way to ask the game's font (cIGZFont),
+// so this uses rough widths of a sans-serif font at that size, erring wide so a message doesn't run into the name before it.
+static int32_t EstimateWidth(const std::wstring& text)
+{
+	int32_t width = 0;
+
+	for (wchar_t c : text)
+	{
+		if (wcschr(L"ijl.,:;'!|", c))
+		{
+			width += 3;
+		}
+		else if (wcschr(L"ftrI -()[]", c))
+		{
+			width += 4;
+		}
+		else if (wcschr(L"mwMW@", c))
+		{
+			width += 10;
+		}
+		else if (c >= L'A' && c <= L'Z')
+		{
+			width += 8;
+		}
+		else if (c < 0x2E80)
+		{
+			width += 7;
+		}
+		else
+		{
+			width += 12;	// Chinese, Japanese, Korean, etc.
+		}
+	}
+
+	return width;
+}
+
+// Returns the name color (in kNameColors) nearest to the launcher's, which comes as "[red,green,blue]", or -1 if there's none
+static int FindNameColor(const std::string& color)
+{
+	std::string numbers = color;
+	for (char& c : numbers)
+	{
+		if (c < '0' || c > '9')
+		{
+			c = ' ';
+		}
+	}
+
+	int rgb[3]{};
+	std::istringstream stream(numbers);
+	if (!(stream >> rgb[0] >> rgb[1] >> rgb[2]))
+	{
+		return -1;
+	}
+
+	int nearest = -1;
+	int nearestDistance = 0;
+	for (int i = 0; i < kNameColorCount; i++)
+	{
+		int distance = 0;
+		for (int channel = 0; channel < 3; channel++)
+		{
+			int difference = rgb[channel] - kNameColors[i][channel];
+			distance += difference * difference;
+		}
+
+		if (nearest < 0 || distance < nearestDistance)
+		{
+			nearest = i;
+			nearestDistance = distance;
+		}
+	}
+
+	return nearest;
 }
 
 static std::string Trim(const std::string& text)
@@ -306,11 +409,11 @@ void ChatPanel::StartTyping()
 	ShowInput();
 }
 
-void ChatPanel::Post(const std::string& text, bool history)
+void ChatPanel::Post(const std::string& text, bool history, const std::string& name, const std::string& color)
 {
 	std::lock_guard<std::mutex> lock(inboxMutex);
 
-	inbox.emplace_back(text, history);
+	inbox.push_back(Notice{ text, history, name, color });
 	while (inbox.size() > kMaxInbox)
 	{
 		inbox.pop_front();
@@ -365,7 +468,7 @@ bool ChatPanel::Shutdown()
 
 bool ChatPanel::OnTick(uint32_t unknown1)
 {
-	std::deque<std::pair<std::string, bool>> received;
+	std::deque<Notice> received;
 	std::optional<std::pair<std::string, std::string>> newStatus;
 	std::optional<std::string> newServerName;
 	{
@@ -395,9 +498,9 @@ bool ChatPanel::OnTick(uint32_t unknown1)
 
 	if (!received.empty())
 	{
-		for (const auto& [text, history] : received)
+		for (const Notice& notice : received)
 		{
-			AddLine(text, history);
+			AddLine(notice);
 		}
 
 		ShowLines();
@@ -812,8 +915,14 @@ bool ChatPanel::GameWantsEnter() const
 	return false;
 }
 
-void ChatPanel::AddLine(const std::string& text, bool history)
+void ChatPanel::AddLine(const Notice& notice)
 {
+	const std::string& text = notice.text;
+	bool chat = !notice.name.empty();
+	int color = chat ? FindNameColor(notice.color) : -1;
+	std::string namePrefix = notice.name + ":";
+	bool first = true;
+
 	// Alerts can have several lines
 	size_t start = 0;
 	while (start <= text.size())
@@ -835,7 +944,20 @@ void ChatPanel::AddLine(const std::string& text, bool history)
 		{
 			for (const std::wstring& piece : Wrap(Text::Utf8ToWide(line)))
 			{
-				lines.push_back(Text::WideToUtf8(piece));
+				Line shown;
+				shown.text = Text::WideToUtf8(piece);
+				shown.chat = chat;
+
+				// Chat starts with "<name>: ", and the name is split off to be shown in its color. The lines it wraps onto have no name.
+				if (first && chat && color >= 0 && shown.text.compare(0, namePrefix.size(), namePrefix) == 0)
+				{
+					shown.name = Shorten(notice.name, kNameLength);
+					shown.color = color;
+					shown.text = Trim(shown.text.substr(namePrefix.size()));
+				}
+				first = false;
+
+				lines.push_back(shown);
 			}
 		}
 
@@ -847,7 +969,7 @@ void ChatPanel::AddLine(const std::string& text, bool history)
 		lines.pop_front();
 	}
 
-	if (!history && (collapsed || minimized))
+	if (!notice.history && (collapsed || minimized))
 	{
 		unread++;
 	}
@@ -890,10 +1012,7 @@ void ChatPanel::Layout()
 
 	// Everything below the title bar is hidden, and the background is swapped for one that's only the title bar,
 	// so nothing is left under it even if the game doesn't shrink the panel
-	for (uint32_t i = 0; i < kLineCount; i++)
-	{
-		SetChildVisible(kFirstLineID + i, open);
-	}
+	ShowLines();
 	SetChildVisible(kBackgroundID, open);
 	SetChildVisible(kInputID, open);
 	SetChildVisible(kChatButtonID, open);
@@ -915,11 +1034,11 @@ void ChatPanel::Layout()
 	{
 		parentWidth = pParent->GetW();
 		parentHeight = pParent->GetH();
-		MovePanel(parentWidth - kChipWidth - kChipRightMargin, parentHeight - kChipHeight - kChipBottomMargin);
+		PlaceWindow(pWin, parentWidth - kChipWidth - kChipRightMargin, parentHeight - kChipHeight - kChipBottomMargin);
 	}
 	else
 	{
-		MovePanel(openLeft, openTop);
+		PlaceWindow(pWin, openLeft, openTop);
 	}
 
 	ShowInput();
@@ -934,22 +1053,23 @@ void ChatPanel::Layout()
 	}
 }
 
+// Moves the panel, or one of its windows, to a place in its parent.
 // The pinned gzcom-dll declares GZWinMoveTo one vtable slot late (see GZWinInterfaces.h), so calling it runs the
 // game's next method, which moves the window by an offset. So it's given the distance to the new place.
-void ChatPanel::MovePanel(int32_t left, int32_t top)
+void ChatPanel::PlaceWindow(cIGZWin* pTarget, int32_t left, int32_t top)
 {
-	int32_t dx = left - pWin->GetL();
-	int32_t dy = top - pWin->GetT();
+	int32_t dx = left - pTarget->GetL();
+	int32_t dy = top - pTarget->GetT();
 	if (dx == 0 && dy == 0)
 	{
 		return;
 	}
 
-	pWin->GZWinMoveTo(dx, dy);
+	pTarget->GZWinMoveTo(dx, dy);
 
-	if (pWin->GetL() != left || pWin->GetT() != top)
+	if (pTarget->GetL() != left || pTarget->GetT() != top)
 	{
-		Log::Line("The chat panel didn't move to (" + std::to_string(left) + ", " + std::to_string(top) + "), it's at (" + std::to_string(pWin->GetL()) + ", " + std::to_string(pWin->GetT()) + ")");
+		Log::Line("A chat panel window didn't move to (" + std::to_string(left) + ", " + std::to_string(top) + "), it's at (" + std::to_string(pTarget->GetL()) + ", " + std::to_string(pTarget->GetT()) + ")");
 	}
 }
 
@@ -970,14 +1090,61 @@ void ChatPanel::SaveMode() const
 	RegSetKeyValueW(HKEY_CURRENT_USER, kSettingsKey, kPanelModeValue, REG_DWORD, &mode, sizeof(mode));
 }
 
-// Shows the newest lines at the bottom
+// Shows the newest lines at the bottom, if the panel is open
 void ChatPanel::ShowLines()
 {
+	bool open = !collapsed && !minimized;
 	size_t blank = kLineCount - lines.size();
 
 	for (size_t i = 0; i < kLineCount; i++)
 	{
-		SetText(kFirstLineID + static_cast<uint32_t>(i), i < blank ? std::string() : lines[i - blank]);
+		ShowLine(static_cast<uint32_t>(i), i < blank ? nullptr : &lines[i - blank], open);
+	}
+}
+
+// Shows a line in a row of the panel, or clears the row if `line` is null. Chat is in navy, after the player's name in its color,
+// and other lines are in grey. Each is a window of its own, since a text window has one color.
+void ChatPanel::ShowLine(uint32_t row, const Line* line, bool open)
+{
+	if (!pWin)
+	{
+		return;
+	}
+
+	bool chat = line && line->chat;
+	bool info = line && !line->chat;
+	bool named = chat && !line->name.empty();
+
+	// The message goes after the name, so its window is moved right of it. The name windows stay where the UI script puts them.
+	cIGZWin* pRow = pWin->GetChildWindowFromID(kFirstNameID + row * kNameLineStep);
+	cIGZWin* pText = pWin->GetChildWindowFromID(kFirstLineID + row);
+	if (pRow && pText)
+	{
+		int32_t indent = 0;
+		if (named)
+		{
+			indent = EstimateWidth(Text::Utf8ToWide(line->name + ":")) + kNameGap;
+		}
+
+		PlaceWindow(pText, pRow->GetL() + indent, pText->GetT());
+		pText->SetW(pRow->GetW() - indent);
+	}
+
+	SetText(kFirstLineID + row, chat ? line->text : std::string());
+	SetChildVisible(kFirstLineID + row, open && chat);
+
+	SetText(kFirstInfoLineID + row, info ? line->text : std::string());
+	SetChildVisible(kFirstInfoLineID + row, open && info);
+
+	for (int color = 0; color < kNameColorCount; color++)
+	{
+		uint32_t id = kFirstNameID + row * kNameLineStep + static_cast<uint32_t>(color);
+		bool shown = named && line->color == color;
+		if (shown)
+		{
+			SetText(id, line->name + ":");
+		}
+		SetChildVisible(id, open && shown);
 	}
 }
 

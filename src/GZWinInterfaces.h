@@ -7,7 +7,7 @@
 //
 // In the pinned cIGZWin.h, SetSize(cRZPoint) is an overload of SetSize(int, int), which MSVC puts next to it, so
 // slots 53 to 57 are each one off: its GZWinMoveTo(x, y) calls the game's slot 57, which moves a window by (x, y).
-// ChatPanel::MovePanel relies on that. Nothing else in slots 53 to 57 is called.
+// ChatPanel::PlaceWindow relies on that. Nothing else in slots 53 to 57 is called.
 
 class cIGZString;
 class cIGZWin;

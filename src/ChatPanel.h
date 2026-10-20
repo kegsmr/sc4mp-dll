@@ -42,7 +42,8 @@ public:
 	void StartTyping();
 
 	// Adds a line from the launcher. Safe to call from any thread. History lines (sent on connecting) don't count as unread.
-	void Post(const std::string& text, bool history);
+	// Chat comes with the player's name, which starts the text, and the launcher's color for it (eg. "[46,125,50]"). Other lines are shown in grey.
+	void Post(const std::string& text, bool history, const std::string& name = std::string(), const std::string& color = std::string());
 
 	// Shows the launcher's save status (eg. "saved", with "Saved 13:01") and the server's name as the title. Safe to call from any thread.
 	void PostStatus(const std::string& state, const std::string& text);
@@ -73,11 +74,29 @@ private:
 	void StopTyping();
 	bool GameWantsEnter() const;
 
-	void AddLine(const std::string& text, bool history);
+	struct Notice
+	{
+		std::string text;
+		bool history = false;
+		std::string name;
+		std::string color;
+	};
+
+	// A line as shown, already wrapped to fit. The first line of a chat message has the player's name, shown before the text in its color.
+	struct Line
+	{
+		std::string text;
+		std::string name;
+		int color = -1;		// in kNameColors
+		bool chat = false;	// shown in navy, or in grey if not
+	};
+
+	void AddLine(const Notice& notice);
+	void ShowLine(uint32_t row, const Line* line, bool open);
 	void SetCollapsed(bool value);
 	void SetMinimized(bool value);
 	void Layout();
-	void MovePanel(int32_t left, int32_t top);
+	void PlaceWindow(cIGZWin* pTarget, int32_t left, int32_t top);
 	void LoadMode();
 	void SaveMode() const;
 	void ShowLines();
@@ -105,11 +124,11 @@ private:
 	bool loggedCoveredClick = false;
 
 	std::mutex inboxMutex;
-	std::deque<std::pair<std::string, bool>> inbox;	// lines from the bridge thread, waiting for the next frame
+	std::deque<Notice> inbox;	// lines from the bridge thread, waiting for the next frame
 	std::optional<std::pair<std::string, std::string>> pendingStatus;
 	std::optional<std::string> pendingServerName;
 
-	std::deque<std::string> lines;	// the lines shown, oldest first, already wrapped to fit
+	std::deque<Line> lines;	// the lines shown, oldest first
 	std::wstring input;
 	bool typing = false;
 	bool collapsed = false;	// only the title bar is shown
