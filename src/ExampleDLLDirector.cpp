@@ -10,6 +10,7 @@
 #include "cISC4City.h"
 #include "cRZBaseString.h"
 #include "cRZMessage2COMDirector.h"
+#include "GZServPtrs.h"
 
 #include <cstdio>
 #include <Windows.h>
