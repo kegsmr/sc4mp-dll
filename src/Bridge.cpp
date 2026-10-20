@@ -94,6 +94,11 @@ void Bridge::SetGuardHandler(GuardHandler handler)
 	guardHandler = std::move(handler);
 }
 
+bool Bridge::IsConnected() const
+{
+	return connected;
+}
+
 void Bridge::SetClaimHandler(ClaimHandler handler)
 {
 	claimHandler = std::move(handler);
@@ -153,7 +158,9 @@ void Bridge::Run()
 			BOOL noDelay = TRUE;
 			setsockopt(s, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&noDelay), sizeof(noDelay));
 
+			connected = true;
 			Talk(s);
+			connected = false;
 
 			Log::Line("Disconnected from the launcher");
 		}

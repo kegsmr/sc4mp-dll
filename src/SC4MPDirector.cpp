@@ -167,6 +167,12 @@ public:
 			break;
 		case kSC4MessagePostSave:
 			SendCityEvent("saved", "Saved city");
+
+			// The launcher reports whether the server took the save, so the game's "City Saved." would say so too soon
+			if (bridge.IsConnected())
+			{
+				chat.HideSavedDialog();
+			}
 			break;
 		case kSC4MessagePreCityShutdown:
 			guard.Detach();

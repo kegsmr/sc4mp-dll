@@ -52,6 +52,9 @@ public:
 	// while the launcher isn't connected.
 	void Send(JsonWriter message);
 
+	// Whether the launcher is connected right now
+	bool IsConnected() const;
+
 private:
 	void Run();
 	void Talk(uintptr_t s);
@@ -64,6 +67,7 @@ private:
 	unsigned short port = 0;
 	std::thread thread;
 	std::atomic<bool> stopping = false;
+	std::atomic<bool> connected = false;
 	NotifyHandler notifyHandler;
 	StatusHandler statusHandler;
 	ServerHandler serverHandler;

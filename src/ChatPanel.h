@@ -45,6 +45,10 @@ public:
 	// Chat comes with the player's name, which starts the text, and the launcher's color for it (eg. "[46,125,50]"). Other lines are shown in grey.
 	void Post(const std::string& text, bool history, const std::string& name = std::string(), const std::string& color = std::string(), bool own = false);
 
+	// Closes the game's "City Saved." message box if it shows within a few seconds, since a city isn't really saved
+	// until the server takes it, which the panel's status shows. Called after the game saves.
+	void HideSavedDialog();
+
 	// Shows the launcher's save status (eg. "saved", with "Saved 13:01") and the server's name as the title. Safe to call from any thread.
 	void PostStatus(const std::string& state, const std::string& text);
 	void PostServerName(const std::string& name);
@@ -68,6 +72,7 @@ private:
 	void GetPanelOrigin(int32_t& left, int32_t& top) const;
 	uint32_t GetButtonAt(int32_t x, int32_t y) const;
 	bool IsOnChild(uint32_t id, int32_t x, int32_t y) const;
+	void CloseSavedDialog();
 	void StartDragging(HWND hWnd, int32_t x, int32_t y);
 	void Drag(int32_t x, int32_t y);
 	void StopDragging();
@@ -157,6 +162,8 @@ private:
 	HWND dragCapture = nullptr;
 	uint32_t buttonsDown = 0;	// the mouse buttons (MK_LBUTTON, etc.) pressed on the panel, whose release is kept from the game too
 	bool loggedCoveredClick = false;
+	ULONGLONG savedDialogDeadline = 0;	// until when the game's "City Saved." is looked for, after a save
+	HWND gameWindow = nullptr;	// the game's window, from the messages it gets
 
 	std::mutex inboxMutex;
 	std::deque<Notice> inbox;	// lines from the bridge thread, waiting for the next frame
