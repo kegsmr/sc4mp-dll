@@ -19,6 +19,7 @@
 #include "GZServPtrs.h"
 #include "SC4UI.h"
 
+#include <cstdio>
 #include <cwchar>
 #include <iterator>
 #include <vector>
@@ -131,6 +132,14 @@ static std::string Shorten(const std::string& text, size_t length)
 	}
 
 	return Text::WideToUtf8(wide.substr(0, length - 3)) + "...";
+}
+
+// Eg. 0x7B3E9A60 as "7B3E9A60", for the log
+static std::string ToHex(uint32_t value)
+{
+	char text[9];
+	snprintf(text, sizeof(text), "%08X", value);
+	return text;
 }
 
 // Splits a line into pieces that fit the panel, breaking at spaces where possible
@@ -849,13 +858,19 @@ void ChatPanel::PressScrollbar(int32_t y, bool press)
 // Sets the game's scrollbar to the shown lines, and the hint for new lines below them
 void ChatPanel::ShowScroll(bool open)
 {
+	// Like a Windows scrollbar: the range is every row, the page is the rows shown, and the value is the top row shown.
+	// So the thumb is at the bottom for the newest lines, and fills the track while they all fit.
 	cRZAutoRefCount<cIGZWinScrollbar> pScrollbar;
 	if (pWin->GetChildAs(kScrollbarID, kGZIID_cIGZWinScrollbar, pScrollbar.AsPPVoid()))
 	{
-		int32_t maxScroll = static_cast<int32_t>(GetMaxScroll());
-		pScrollbar->SetMinMax(0, maxScroll);
+		int32_t rows = static_cast<int32_t>(lines.size());
+		if (rows < static_cast<int32_t>(kLineCount))
+		{
+			rows = static_cast<int32_t>(kLineCount);
+		}
+		pScrollbar->SetMinMax(0, rows - 1);
 		pScrollbar->SetPageSize(static_cast<int32_t>(kLineCount));
-		pScrollbar->SetValue(maxScroll - static_cast<int32_t>(scrollRows));
+		pScrollbar->SetValue(static_cast<int32_t>(GetMaxScroll() - scrollRows));
 	}
 	SetChildVisible(kScrollbarID, open);
 
@@ -923,19 +938,31 @@ bool ChatPanel::IsOnPanel(int32_t x, int32_t y)
 		return true;
 	}
 
+	cIGZWin* pTop = nullptr;	// the view's child the hit is in
 	for (int depth = 0; pHit && depth < kMaxWinDepth; depth++)
 	{
 		if (pHit == pWin)
 		{
 			return true;
 		}
+		if (pHit->GetParentWin() == pParent)
+		{
+			pTop = pHit;
+		}
 		pHit = pHit->GetParentWin();
+	}
+
+	// A layer as big as the view (eg. one the region view adds over the panel after it) isn't a window over the
+	// panel, so the panel still takes the click, as it's drawn there
+	if (!pTop || (pTop->GetW() >= pParent->GetW() && pTop->GetH() >= pParent->GetH()))
+	{
+		return true;
 	}
 
 	// Logged once, since it also happens if the window manager's coordinates aren't the game window's
 	if (!loggedCoveredClick)
 	{
-		Log::Line("A click on the chat panel went to another of the game's windows over it");
+		Log::Line("A click on the chat panel went to another of the game's windows over it (ID 0x" + ToHex(pTop->GetID()) + ", " + std::to_string(pTop->GetW()) + "x" + std::to_string(pTop->GetH()) + ")");
 		loggedCoveredClick = true;
 	}
 
@@ -1349,6 +1376,7 @@ void ChatPanel::Layout()
 		int32_t top = 0;
 		GetChipPlace(chipSpot, left, top);
 		PlaceWindow(pWin, left, top);
+		pWin->PullToFront();	// over windows the view added after it
 	}
 	else
 	{
