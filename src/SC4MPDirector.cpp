@@ -281,11 +281,21 @@ private:
 		}
 
 		// The message has the whole line that was typed, eg. "say hello everyone"
-		std::string line = pCheatText ? Text::ToUtf8(pCheatText->ToChar()) : std::string();
+		std::string line;
+		if (pCheatText)
+		{
+			line = Text::ToUtf8(pCheatText->ToChar());
+		}
+
 		std::string arguments = GetArguments(line);
 
 		// Logged, to find out why these don't arrive in the region view
-		Log::Line("Cheat code: \"" + line + "\"" + (pCheatText ? "" : " (no text)"));
+		std::string logged = "Cheat code: \"" + line + "\"";
+		if (!pCheatText)
+		{
+			logged += " (no text)";
+		}
+		Log::Line(logged);
 
 		if (cheatID == kCheatSay)
 		{
@@ -299,7 +309,14 @@ private:
 		}
 		else
 		{
-			SendCommand(arguments.empty() ? "help" : arguments);
+			if (arguments.empty())
+			{
+				SendCommand("help");
+			}
+			else
+			{
+				SendCommand(arguments);
+			}
 		}
 	}
 
@@ -333,8 +350,18 @@ private:
 		}
 
 		cIGZWin* pMainWin = pApp->GetMainWindow();
-		cIGZWin* pSC4AppWin = pMainWin ? pMainWin->GetChildWindowFromID(kGZWin_WinSC4App) : nullptr;
-		cIGZWin* pChild = pSC4AppWin ? pSC4AppWin->GetChildWindowFromID(id) : nullptr;
+
+		cIGZWin* pSC4AppWin = nullptr;
+		if (pMainWin)
+		{
+			pSC4AppWin = pMainWin->GetChildWindowFromID(kGZWin_WinSC4App);
+		}
+
+		cIGZWin* pChild = nullptr;
+		if (pSC4AppWin)
+		{
+			pChild = pSC4AppWin->GetChildWindowFromID(id);
+		}
 
 		if (!pChild)
 		{
