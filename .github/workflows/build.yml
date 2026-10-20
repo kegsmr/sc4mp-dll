@@ -21,6 +21,73 @@ jobs:
       - name: Build
         run: msbuild src/SC4MP.sln /p:Configuration=Release /p:Platform=x86 /p:PostBuildEventUseInBuild=false /m
 
+      # Some players are still on Windows 7 SP1, where the DLL fails to load if it statically imports
+      # anything newer. The STL loads newer APIs with GetProcAddress, which is fine, so only static
+      # imports are checked here.
+      - name: Check Windows 7 compatibility
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          $dumpbin = Get-ChildItem "$vs\VC\Tools\MSVC\*\bin\Hostx64\x86\dumpbin.exe" | Select-Object -First 1
+          $dll = "src\Release\sc4mp.dll"
+
+          $allowedDlls = @(
+            "KERNEL32", "USER32", "GDI32", "ADVAPI32", "WS2_32", "SHELL32", "OLE32",
+            "OLEAUT32", "SHLWAPI", "VERSION", "IPHLPAPI", "MSWSOCK", "WINMM"
+          )
+          # Not a full list of everything newer than Windows 7, just the ones the toolchain is likely to pull in
+          $deniedFunctions = @(
+            "GetSystemTimePreciseAsFileTime", "GetCurrentThreadStackLimits", "SetThreadDescription",
+            "GetThreadDescription", "CreateFile2", "CopyFile2", "WaitOnAddress", "WakeByAddressSingle",
+            "WakeByAddressAll", "PrefetchVirtualMemory", "GetOverlappedResultEx", "SetThreadInformation",
+            "GetProcessInformation", "SetProcessInformation", "GetProcessMitigationPolicy",
+            "SetProcessMitigationPolicy", "InitializeSynchronizationBarrier", "EnterSynchronizationBarrier",
+            "DeleteSynchronizationBarrier", "CreateFileMappingFromApp", "MapViewOfFileFromApp",
+            "VirtualAllocFromApp", "DiscardVirtualMemory", "OfferVirtualMemory", "ReclaimVirtualMemory",
+            "GetFirmwareType", "GetCurrentPackageId", "GetCurrentPackageFullName", "GetPackageFamilyName",
+            "SetThreadpoolTimerEx", "SetThreadpoolWaitEx", "GetAddrInfoExCancel",
+            "GetAddrInfoExOverlappedResult", "GetDpiForWindow", "GetDpiForSystem",
+            "SetProcessDpiAwarenessContext", "SetThreadDpiAwarenessContext", "GetSystemMetricsForDpi",
+            "AdjustWindowRectExForDpi", "EnableNonClientDpiScaling", "GetPointerInfo", "GetPointerType",
+            # Only on Windows 7 with KB2533623, which players may not have
+            "SetDefaultDllDirectories", "AddDllDirectory", "RemoveDllDirectory"
+          )
+
+          $imports = & $dumpbin /nologo /imports $dll
+          $imports | Write-Output
+
+          $problems = @()
+          $currentDll = $null
+          foreach ($line in $imports) {
+            if ($line -match '^\s+(\S+)\.dll\s*$') {
+              $currentDll = $Matches[1].ToUpper()
+              if ($currentDll -notin $allowedDlls) {
+                $problems += "Imports from $currentDll.dll, which isn't on the Windows 7 allowlist"
+              }
+            } elseif ($line -match '^\s+[0-9A-F]+\s+(\S+)\s*$') {
+              if ($Matches[1] -in $deniedFunctions) {
+                $problems += "Imports $($Matches[1]) from $currentDll.dll, which isn't on Windows 7"
+              }
+            }
+          }
+
+          # Windows 7 is 6.1, so the image mustn't ask for anything newer
+          $headers = & $dumpbin /nologo /headers $dll
+          foreach ($line in $headers) {
+            if ($line -match '^\s+(\d+)\.(\d+) (operating system|subsystem) version\s*$') {
+              Write-Output $line.Trim()
+              if ([int]$Matches[1] * 100 + [int]$Matches[2] -gt 601) {
+                $problems += "The $($Matches[3]) version is $($Matches[1]).$($Matches[2]), newer than Windows 7 (6.01)"
+              }
+            }
+          }
+
+          if ($problems.Count -gt 0) {
+            $problems | ForEach-Object { Write-Output "::error::$_" }
+            exit 1
+          }
+          Write-Output "No imports or version requirements newer than Windows 7"
+
       # The chat panel's UI script goes in the Plugins folder with the DLL
       - name: Pack the UI
         run: python tools/make-ui-dat.py src/Release/sc4mp-dll-ui.dat
