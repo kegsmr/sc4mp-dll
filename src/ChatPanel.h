@@ -9,6 +9,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 #include <Windows.h>
 
 class cIGZWin;
@@ -72,6 +73,8 @@ private:
 	void GetPanelOrigin(int32_t& left, int32_t& top) const;
 	uint32_t GetButtonAt(int32_t x, int32_t y) const;
 	bool IsOnChild(uint32_t id, int32_t x, int32_t y) const;
+	void CheckSavedDialog(bool fromMessage);
+	void LogSavedDialogFinding(const std::string& text);
 	void CloseSavedDialog();
 	void StartDragging(HWND hWnd, int32_t x, int32_t y);
 	void Drag(int32_t x, int32_t y);
@@ -163,6 +166,10 @@ private:
 	uint32_t buttonsDown = 0;	// the mouse buttons (MK_LBUTTON, etc.) pressed on the panel, whose release is kept from the game too
 	bool loggedCoveredClick = false;
 	ULONGLONG savedDialogDeadline = 0;	// until when the game's "City Saved." is looked for, after a save
+	ULONGLONG lastSavedDialogCheck = 0;
+	int savedDialogTicks = 0;	// how often it was looked for, on frames and on messages
+	int savedDialogMessages = 0;
+	std::vector<std::string> savedDialogFindings;	// what was logged while looking for it
 	HWND gameWindow = nullptr;	// the game's window, from the messages it gets
 
 	std::mutex inboxMutex;
