@@ -1,0 +1,23 @@
+name: Bridge test (throwaway)
+
+on:
+  push:
+    branches: [3-bridge-ci-test]
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+      - name: Build the harness
+        run: cl /nologo /std:c++20 /EHsc /W3 /MT /Isrc test\bridge_test.cpp src\Bridge.cpp src\Json.cpp src\Log.cpp src\Text.cpp /Fe:bridge_test.exe
+      - name: Without SC4MP_BRIDGE_PORT
+        run: .\bridge_test.exe
+      - name: Against a fake launcher
+        run: python test\fake_launcher.py .\bridge_test.exe
+      - name: SC4MP.log
+        if: always()
+        run: Get-Content SC4MP.log
