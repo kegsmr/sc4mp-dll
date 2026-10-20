@@ -740,8 +740,15 @@ void ChatPanel::Paste(HWND hWnd)
 		{
 			for (; *text; text++)
 			{
+				wchar_t c = *text;
+
 				// A message is one line
-				Type(*text == L'\r' || *text == L'\n' || *text == L'\t' ? L' ' : *text);
+				if (c == L'\r' || c == L'\n' || c == L'\t')
+				{
+					c = L' ';
+				}
+
+				Type(c);
 			}
 			GlobalUnlock(data);
 		}
@@ -764,9 +771,14 @@ void ChatPanel::Send()
 	if (text[0] == '/')
 	{
 		std::string command = Trim(text.substr(1));
+		if (command.empty())
+		{
+			command = "help";
+		}
+
 		if (sendCommand)
 		{
-			sendCommand(command.empty() ? "help" : command);
+			sendCommand(command);
 		}
 	}
 	else if (sendChat)
@@ -908,8 +920,20 @@ void ChatPanel::Layout()
 	SetChildVisible(kChipTextID, minimized);
 
 	// Shrunk too, so the empty part doesn't take clicks meant for the view under it
-	pWin->SetW(minimized ? kChipWidth : openWidth);
-	pWin->SetH(minimized ? kChipHeight : collapsed ? kCollapsedHeight : openHeight);
+	int32_t width = openWidth;
+	int32_t height = openHeight;
+	if (minimized)
+	{
+		width = kChipWidth;
+		height = kChipHeight;
+	}
+	else if (collapsed)
+	{
+		height = kCollapsedHeight;
+	}
+
+	pWin->SetW(width);
+	pWin->SetH(height);
 
 	if (minimized && pParent)
 	{
@@ -966,7 +990,16 @@ void ChatPanel::LoadMode()
 
 void ChatPanel::SaveMode() const
 {
-	DWORD mode = minimized ? 2 : collapsed ? 1 : 0;
+	DWORD mode = 0;
+	if (minimized)
+	{
+		mode = 2;
+	}
+	else if (collapsed)
+	{
+		mode = 1;
+	}
+
 	RegSetKeyValueW(HKEY_CURRENT_USER, kSettingsKey, kPanelModeValue, REG_DWORD, &mode, sizeof(mode));
 }
 
@@ -977,7 +1010,16 @@ void ChatPanel::ShowLines()
 
 	for (size_t i = 0; i < kLineCount; i++)
 	{
-		SetText(kFirstLineID + static_cast<uint32_t>(i), i < blank ? std::string() : lines[i - blank]);
+		uint32_t id = kFirstLineID + static_cast<uint32_t>(i);
+
+		if (i < blank)
+		{
+			SetText(id, std::string());
+		}
+		else
+		{
+			SetText(id, lines[i - blank]);
+		}
 	}
 }
 
@@ -1004,15 +1046,34 @@ void ChatPanel::ShowInput()
 
 void ChatPanel::ShowTitle()
 {
-	SetText(kTitleID, serverName.empty() ? kTitle : Shorten(serverName, kTitleLength));
+	if (serverName.empty())
+	{
+		SetText(kTitleID, kTitle);
+	}
+	else
+	{
+		SetText(kTitleID, Shorten(serverName, kTitleLength));
+	}
 
-	std::string count = unread > 99 ? "99+" : std::to_string(unread);
+	std::string count = std::to_string(unread);
+	if (unread > 99)
+	{
+		count = "99+";
+	}
+
 	bool badge = collapsed && !minimized && unread > 0;
 	SetChildVisible(kBadgeID, badge);
 	SetChildVisible(kBadgeTextID, badge);
 	SetText(kBadgeTextID, count);
 
-	SetText(kChipTextID, unread > 0 ? count + " new" : "Chat");
+	if (unread > 0)
+	{
+		SetText(kChipTextID, count + " new");
+	}
+	else
+	{
+		SetText(kChipTextID, "Chat");
+	}
 }
 
 // Shows the launcher's save status, which stays in the title bar while the panel is collapsed
@@ -1026,7 +1087,14 @@ void ChatPanel::ShowStatus()
 	{
 		if (state == iconState)
 		{
-			shown = minimized ? id + kChipIconOffset : id;
+			if (minimized)
+			{
+				shown = id + kChipIconOffset;
+			}
+			else
+			{
+				shown = id;
+			}
 			break;
 		}
 	}
@@ -1055,7 +1123,12 @@ void ChatPanel::SetText(uint32_t id, const std::string& text)
 
 void ChatPanel::SetChildVisible(uint32_t id, bool visible)
 {
-	cIGZWin* pChild = pWin ? pWin->GetChildWindowFromID(id) : nullptr;
+	if (!pWin)
+	{
+		return;
+	}
+
+	cIGZWin* pChild = pWin->GetChildWindowFromID(id);
 	if (!pChild)
 	{
 		return;
