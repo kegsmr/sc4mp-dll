@@ -15,8 +15,8 @@ class cIGZWin;
 
 // A chat window in the city and region views. It shows the last lines the launcher sent, and the
 // player presses Enter (or clicks the send button) to type a message, Enter again to send it and Esc to cancel.
-// The title bar shows the server's name and the launcher's save status. The panel can be collapsed to its title bar,
-// or minimized to a small button in the bottom right corner, which it starts as. The choice is kept while the game runs.
+// The title bar shows the server's name and the launcher's save status. The panel can be minimized to a small button
+// in the bottom right corner, which it starts as. The choice is kept while the game runs.
 //
 // The window is made by the game from the UI script in ui/ChatPanel.ui, so it looks like the game's own.
 // Only Post() may be called from another thread: it queues the line, and the queue is emptied every
@@ -94,7 +94,6 @@ private:
 
 	void AddLine(const Notice& notice);
 	void ShowLine(uint32_t row, const Line* line, bool open);
-	void SetCollapsed(bool value);
 	void SetMinimized(bool value);
 	void Layout();
 	void PlaceWindow(cIGZWin* pTarget, int32_t left, int32_t top);
@@ -131,7 +130,6 @@ private:
 	std::deque<Line> lines;	// the lines shown, oldest first
 	std::wstring input;
 	bool typing = false;
-	bool collapsed = false;	// only the title bar is shown
 	bool minimized = true;	// only a small button in the bottom right corner is shown, as when the game starts
 	int unread = 0;
 	std::string serverName;

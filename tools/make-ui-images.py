@@ -46,7 +46,6 @@ TILE_CLAIMED = (179, 196, 208)
 TILE_UNCLAIMED = (92, 151, 190)
 
 # The layout, which must match ui/ChatPanel.ui
-COLLAPSED_SIZE = (366, 42)
 FIELD_SIZE = (290, 26)
 CHIP_SIZE = (88, 32)
 STATUS_SIZE = 14
@@ -95,8 +94,8 @@ def finish(image):
 
 def draw_frame(width, height, face=STEEL, rim=None):
 	"""Draws a plain steel frame at the exact size of its window, like the game's {46a006b0,144161e4}: a soft pale halo,
-	a navy outline and a steel face, with a light `rim` inside the outline if given. For the collapsed panel and the chip,
-	which are too small to stretch the game's own frame."""
+	a navy outline and a steel face, with a light `rim` inside the outline if given. For the chip, which is too small to
+	stretch the game's own frame."""
 
 	image = Image.new("RGBA", (width * SCALE, height * SCALE))
 	draw = ImageDraw.Draw(image)
@@ -145,15 +144,6 @@ def draw_status_tip():
 	"""Draws a see-through button the size of a status icon, in four frames, which is over the icon for its tooltip."""
 
 	return Image.new("RGBA", (STATUS_SIZE * len(STATES), STATUS_SIZE))
-
-
-def draw_badge():
-	"""Draws the red pill for the unread count, which is a text window on top of it."""
-
-	width, height = 22, 15
-	image = Image.new("RGBA", (width * SCALE, height * SCALE))
-	ImageDraw.Draw(image).rounded_rectangle(scaled(0, 0, width - 1, height - 1), 7.5 * SCALE, fill=(206, 52, 52, 255), outline=OUTLINE + (255,), width=SCALE)
-	return finish(image)
 
 
 def draw_title_button(draw_icon):
@@ -256,12 +246,10 @@ def make_images():
 	"""Returns the images by file name."""
 
 	return {
-		"chat-panel-collapsed.png": draw_frame(*COLLAPSED_SIZE),
 		"chat-field.png": draw_field(active=False),
 		"chat-field-typing.png": draw_field(active=True),
 		"chat-minimize.png": draw_title_button(minimize_arrow),
 		"chat-chip.png": draw_chip(),
-		"chat-badge.png": draw_badge(),
 		"status-tip.png": draw_status_tip(),
 		"status-saved.png": draw_status(GREEN, "check"),
 		"status-saving.png": draw_status(BLUE, "arrows"),

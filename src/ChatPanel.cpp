@@ -30,12 +30,7 @@ static constexpr uint32_t kPanelGroup = 0xC0E6A1C5;
 static constexpr uint32_t kPanelInstance = 0x1A9F3B21;
 static constexpr uint32_t kPanelID = 0x7B3E9A60;
 static constexpr uint32_t kTitleID = 0x7B3E9A61;
-static constexpr uint32_t kHideButtonID = 0x7B3E9A62;
-static constexpr uint32_t kShowButtonID = 0x7B3E9A63;		// in the same place as Hide, shown instead of it while collapsed
-static constexpr uint32_t kBadgeID = 0x7B3E9A64;
-static constexpr uint32_t kBadgeTextID = 0x7B3E9A65;
 static constexpr uint32_t kBackgroundID = 0x7B3E9A66;
-static constexpr uint32_t kCollapsedBackgroundID = 0x7B3E9A67;
 static constexpr uint32_t kFieldID = 0x7B3E9A68;
 static constexpr uint32_t kTypingFieldID = 0x7B3E9A69;
 static constexpr uint32_t kFirstLineID = 0x7B3E9A70;
@@ -75,12 +70,10 @@ static constexpr uint8_t kNameColors[][3] = {
 static constexpr int kNameColorCount = static_cast<int>(std::size(kNameColors));
 
 // The panel's buttons, of which only the shown ones can be clicked
-static constexpr uint32_t kButtonIDs[] = { kMinimizeButtonID, kHideButtonID, kShowButtonID, kChatButtonID, kChipID, kFieldID };	// the field is clicked to type
+static constexpr uint32_t kButtonIDs[] = { kMinimizeButtonID, kChatButtonID, kChipID, kFieldID };	// the field is clicked to type
 
 // Windows in the title bar, shown unless the panel is minimized
 static constexpr uint32_t kTitleBarIDs[] = { kTitleID, kStatusTipID, kMinimizeButtonID };
-
-// Where the panel's open, collapsed or minimized state is kept between games
 
 // The save status icons, one window each, of which only the current one is shown
 static constexpr std::pair<const char*, uint32_t> kStatusIcons[] = {
@@ -100,12 +93,10 @@ static constexpr size_t kLineLength = 48;			// characters that fit on a line, ro
 static constexpr int32_t kInputWidth = 276;			// the input's text window, less its gutters; the end of a longer message is shown while typing it
 static constexpr size_t kMaxInputLength = 200;
 static constexpr size_t kMaxInbox = 100;
-static constexpr int32_t kTitleWidth = 262;			// the title's text window, less its gutters, before the status icon
-static constexpr int32_t kBadgeWidth = 26;			// the unread badge, which is over the end of the title's window
+static constexpr int32_t kTitleWidth = 290;			// the title's text window, less its gutters, before the status icon
 static constexpr int32_t kTitleFontScale = 9;		// the title's font (DataInsetHeader) is about 9/8 as wide as the chat lines' (see Text::ShortenToWidth)
 static constexpr size_t kNameLength = 20;			// a longer player name is shortened
 static constexpr int32_t kNameGap = 4;				// between a player's name and their message
-static constexpr int32_t kCollapsedHeight = 42;		// just the title bar in its frame, as in chat-panel-collapsed.png
 
 static constexpr uint32_t kGZWinMessageCommand = 3;
 static constexpr uint32_t kGZWinCommandButtonClicked = 0x287259F6;
@@ -374,10 +365,6 @@ void ChatPanel::StartTyping()
 	{
 		SetMinimized(false);
 	}
-	else if (collapsed)
-	{
-		SetCollapsed(false);
-	}
 
 	typing = true;
 	ShowInput();
@@ -504,14 +491,6 @@ bool ChatPanel::Click(uint32_t buttonID)
 {
 	switch (buttonID)
 	{
-	case kHideButtonID:
-	case kShowButtonID:
-		if (typing)
-		{
-			StopTyping();
-		}
-		SetCollapsed(!collapsed);
-		return true;
 	case kMinimizeButtonID:
 		if (typing)
 		{
@@ -981,21 +960,10 @@ void ChatPanel::AddLine(const Notice& notice)
 		lines.pop_front();
 	}
 
-	if (!notice.history && (collapsed || minimized))
+	if (!notice.history && minimized)
 	{
 		unread++;
 	}
-}
-
-void ChatPanel::SetCollapsed(bool value)
-{
-	collapsed = value;
-	if (!collapsed)
-	{
-		unread = 0;
-	}
-
-	Layout();
 }
 
 void ChatPanel::SetMinimized(bool value)
@@ -1003,7 +971,6 @@ void ChatPanel::SetMinimized(bool value)
 	minimized = value;
 	if (!minimized)
 	{
-		collapsed = false;	// the chip opens the whole panel
 		unread = 0;
 	}
 
@@ -1018,17 +985,12 @@ void ChatPanel::Layout()
 		return;
 	}
 
-	bool open = !collapsed && !minimized;
+	bool open = !minimized;
 
-	// Everything below the title bar is hidden, and the background is swapped for one that's only the title bar,
-	// so nothing is left under it even if the game doesn't shrink the panel
 	ShowLines();
 	SetChildVisible(kBackgroundID, open);
 	SetChildVisible(kInputID, open);
 	SetChildVisible(kChatButtonID, open);
-	SetChildVisible(kHideButtonID, open);
-	SetChildVisible(kCollapsedBackgroundID, collapsed && !minimized);
-	SetChildVisible(kShowButtonID, collapsed && !minimized);
 	for (uint32_t id : kTitleBarIDs)
 	{
 		SetChildVisible(id, !minimized);
@@ -1043,10 +1005,6 @@ void ChatPanel::Layout()
 	{
 		width = kChipWidth;
 		height = kChipHeight;
-	}
-	else if (collapsed)
-	{
-		height = kCollapsedHeight;
 	}
 
 	pWin->SetW(width);
@@ -1098,7 +1056,7 @@ void ChatPanel::PlaceWindow(cIGZWin* pTarget, int32_t left, int32_t top)
 // Shows the newest lines at the bottom, if the panel is open
 void ChatPanel::ShowLines()
 {
-	bool open = !collapsed && !minimized;
+	bool open = !minimized;
 	size_t blank = kLineCount - lines.size();
 
 	for (size_t i = 0; i < kLineCount; i++)
@@ -1175,7 +1133,7 @@ void ChatPanel::ShowLine(uint32_t row, const Line* line, bool open)
 
 void ChatPanel::ShowInput()
 {
-	bool open = !collapsed && !minimized;
+	bool open = !minimized;
 	SetChildVisible(kFieldID, open && !typing);
 	SetChildVisible(kTypingFieldID, open && typing);
 
@@ -1207,22 +1165,13 @@ void ChatPanel::ShowInput()
 
 void ChatPanel::ShowTitle()
 {
-	bool badge = collapsed && !minimized && unread > 0;
-
-	// The badge is over the end of the title's window, so a long title is shortened before it
-	int32_t titleWidth = kTitleWidth;
-	if (badge)
-	{
-		titleWidth -= kBadgeWidth;
-	}
-
 	if (serverName.empty())
 	{
 		SetText(kTitleID, kTitle);
 	}
 	else
 	{
-		SetText(kTitleID, Text::ShortenToWidth(serverName, titleWidth, kTitleFontScale));
+		SetText(kTitleID, Text::ShortenToWidth(serverName, kTitleWidth, kTitleFontScale));
 	}
 
 	std::string count = std::to_string(unread);
@@ -1230,10 +1179,6 @@ void ChatPanel::ShowTitle()
 	{
 		count = "99+";
 	}
-
-	SetChildVisible(kBadgeID, badge);
-	SetChildVisible(kBadgeTextID, badge);
-	SetText(kBadgeTextID, count);
 
 	if (unread > 0)
 	{
@@ -1245,7 +1190,7 @@ void ChatPanel::ShowTitle()
 	}
 }
 
-// Shows the launcher's save status, which stays in the title bar while the panel is collapsed
+// Shows the launcher's save status in the title bar, or on the chip when minimized
 void ChatPanel::ShowStatus()
 {
 	const auto& [state, text] = status;

@@ -23,12 +23,10 @@ UI_TYPE = 0x00000000
 # don't clash with the game's, the launcher's (0x14416302, 0x14416312, 0x14416314, 0xEA7F0EAE) or other plugins' images.
 # The panel frames and most buttons are the game's own images, which the scripts use by their keys, so they aren't here.
 IMAGE_FILES = {
-	"chat-panel-collapsed.png": 0x6E45DC90,
 	"chat-field.png": 0xF9C0707C,
 	"chat-field-typing.png": 0x62225A7B,
 	"chat-minimize.png": 0x391B92E8,
 	"chat-chip.png": 0x3B71C9C9,
-	"chat-badge.png": 0xD1AA828D,
 	"status-tip.png": 0x5C3B8E21,
 	"status-saved.png": 0xEB0C124A,
 	"status-saving.png": 0x8ED6ED86,
