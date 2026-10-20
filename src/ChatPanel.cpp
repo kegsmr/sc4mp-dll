@@ -103,7 +103,7 @@ static constexpr int32_t kInputWidth = 158;			// the input's text window, less i
 static constexpr size_t kMaxInputLength = 200;
 static constexpr size_t kMaxInbox = 100;
 static constexpr int32_t kTitleWidth = 258;			// the title's text window, less its gutters, before the unread badge
-static constexpr int32_t kTitleFontScale = 9;		// the title's font (DataInsetHeader) is about 9/8 as wide as the chat lines' (see ShortenToWidth)
+static constexpr int32_t kTitleFontScale = 9;		// the title's font (DataInsetHeader) is about 9/8 as wide as the chat lines' (see Text::ShortenToWidth)
 static constexpr int32_t kStatusWidth = 91;			// the status's text window in its pill, less its gutters
 static constexpr size_t kNameLength = 20;			// a longer player name is shortened
 static constexpr int32_t kNameGap = 4;				// between a player's name and their message
@@ -154,68 +154,6 @@ static std::vector<std::wstring> Wrap(const std::wstring& text)
 
 	pieces.push_back(text.substr(start));
 	return pieces;
-}
-
-// Estimates how wide text is in the chat lines' font. The pinned gzcom-dll has no way to ask the game's font (cIGZFont),
-// so this uses widths of the chat lines' font (DataInsetLegend) measured in game at 1024x768, with the pixel between
-// letters, rounded up a little so a message doesn't run into the name before it. Eg. "Keg (1):" is about 36 pixels wide
-// in game, and 40 here. (The widths before were measured from a scaled down screenshot, so the colon was hidden.)
-static int32_t EstimateWidth(const std::wstring& text)
-{
-	int32_t width = 0;
-
-	for (wchar_t c : text)
-	{
-		if (wcschr(L"ijl.,:;'!| ", c))
-		{
-			width += 3;
-		}
-		else if (wcschr(L"ftr()[]-I", c))
-		{
-			width += 4;
-		}
-		else if (wcschr(L"mwMW@", c))
-		{
-			width += 11;
-		}
-		else if (c >= L'A' && c <= L'Z')
-		{
-			width += 7;
-		}
-		else if (c >= L'0' && c <= L'9')
-		{
-			width += 7;
-		}
-		else if (c < 0x2E80)
-		{
-			width += 6;
-		}
-		else
-		{
-			width += 13;	// Chinese, Japanese, Korean, etc.
-		}
-	}
-
-	return width;
-}
-
-// Shortens text to fit `width` pixels, ending it with "..." if it was cut. A text window that's too narrow for its text
-// shows only what fits before a space, so text has to be shortened to fit. `scale` / 8 is how much wider than the chat
-// lines' font its font is (see EstimateWidth).
-static std::string ShortenToWidth(const std::string& text, int32_t width, int32_t scale)
-{
-	std::wstring wide = Text::Utf8ToWide(text);
-	if (EstimateWidth(wide) * scale / 8 <= width)
-	{
-		return text;
-	}
-
-	while (!wide.empty() && EstimateWidth(wide + L"...") * scale / 8 > width)
-	{
-		wide.pop_back();
-	}
-
-	return Text::WideToUtf8(wide) + "...";
 }
 
 // Returns the name color (in kNameColors) nearest to the launcher's, which comes as "[red,green,blue]", or -1 if there's none
@@ -1215,7 +1153,7 @@ void ChatPanel::ShowLine(uint32_t row, const Line* line, bool open)
 		int32_t indent = 0;
 		if (named)
 		{
-			indent = EstimateWidth(Text::Utf8ToWide(line->name + ":")) + kNameGap;
+			indent = Text::EstimateWidth(Text::Utf8ToWide(line->name + ":")) + kNameGap;
 		}
 
 		PlaceWindow(pText, pRow->GetL() + indent, pText->GetT());
@@ -1267,9 +1205,9 @@ void ChatPanel::ShowInput()
 	}
 
 	std::wstring shown = input;
-	if (EstimateWidth(L"> " + shown + L"_") > kInputWidth)
+	if (Text::EstimateWidth(L"> " + shown + L"_") > kInputWidth)
 	{
-		while (!shown.empty() && EstimateWidth(L"> ..." + shown + L"_") > kInputWidth)
+		while (!shown.empty() && Text::EstimateWidth(L"> ..." + shown + L"_") > kInputWidth)
 		{
 			shown.erase(0, 1);
 		}
@@ -1287,7 +1225,7 @@ void ChatPanel::ShowTitle()
 	}
 	else
 	{
-		SetText(kTitleID, ShortenToWidth(serverName, kTitleWidth, kTitleFontScale));
+		SetText(kTitleID, Text::ShortenToWidth(serverName, kTitleWidth, kTitleFontScale));
 	}
 
 	std::string count = std::to_string(unread);
@@ -1340,7 +1278,7 @@ void ChatPanel::ShowStatus()
 		SetChildVisible(id + kChipIconOffset, id + kChipIconOffset == shown);
 	}
 
-	SetText(kStatusTextID, ShortenToWidth(text, kStatusWidth, 8));
+	SetText(kStatusTextID, Text::ShortenToWidth(text, kStatusWidth, 8));
 }
 
 void ChatPanel::SetText(uint32_t id, const std::string& text)

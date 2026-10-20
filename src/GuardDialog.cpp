@@ -33,22 +33,25 @@ static constexpr uint32_t kStayButtonID = 0x7B3E9AC9;
 
 static constexpr uint32_t kButtonIDs[] = { kBackButtonID, kStayButtonID };
 
-static constexpr size_t kNameLength = 20;	// so "<city> belongs to <owner>." fits on its line
+static constexpr int32_t kLineWidth = 284;	// the owner line's text window (in GenBodyMedium), less its gutters
 
 static constexpr uint32_t kGZWinMessageCommand = 3;
 static constexpr uint32_t kGZWinCommandButtonClicked = 0x287259F6;
 static constexpr int kMaxWinDepth = 32;	// in case a window's parent chain loops
 
-// Shortens text to `length` characters, ending it with "..." if it was cut
-static std::string Shorten(const std::string& text, size_t length)
+// Returns "<city> belongs to <owner>.", shortening the names only if the line doesn't fit. The city gets what the owner's
+// name leaves, but at least half the line, so a very long owner name is shortened too.
+static std::string OwnerLine(const std::string& city, const std::string& owner)
 {
-	std::wstring wide = Text::Utf8ToWide(text);
-	if (wide.size() <= length)
+	int32_t cityWidth = kLineWidth - Text::EstimateWidth(Text::Utf8ToWide(" belongs to " + owner + "."));
+	if (cityWidth < kLineWidth / 2)
 	{
-		return text;
+		cityWidth = kLineWidth / 2;
 	}
+	std::string shownCity = Text::ShortenToWidth(city, cityWidth, 8);
 
-	return Text::WideToUtf8(wide.substr(0, length - 3)) + "...";
+	int32_t ownerWidth = kLineWidth - Text::EstimateWidth(Text::Utf8ToWide(shownCity + " belongs to ."));
+	return shownCity + " belongs to " + Text::ShortenToWidth(owner, ownerWidth, 8) + ".";
 }
 
 GuardDialog::GuardDialog()
@@ -260,7 +263,7 @@ void GuardDialog::Show(const Warning& warning)
 		pWinGen->SetWinProc(this);
 	}
 
-	SetText(kOwnerLineID, Shorten(warning.city, kNameLength) + " belongs to " + Shorten(warning.owner, kNameLength) + ".");
+	SetText(kOwnerLineID, OwnerLine(warning.city, warning.owner));
 
 	// Centered in the view. The pinned gzcom-dll's GZWinMoveTo moves by an offset (see GZWinInterfaces.h).
 	int32_t dx = (pParent->GetW() - pWin->GetW()) / 2 - pWin->GetL();
