@@ -13,7 +13,7 @@ jobs:
         with:
           arch: x86
       - name: Build the harness
-        run: cl /nologo /std:c++20 /EHsc /W3 /MT /Isrc test\bridge_test.cpp src\Bridge.cpp src\Json.cpp src\Log.cpp src\Text.cpp /Fe:bridge_test.exe
+        run: cl /nologo /std:c++20 /EHsc /W3 /MT /Isrc test\bridge_test.cpp src\Bridge.cpp src\Json.cpp src\Log.cpp src\Text.cpp /Fe:bridge_test.exe user32.lib
       - name: Without SC4MP_BRIDGE_PORT
         run: .\bridge_test.exe
       - name: Against a fake launcher
