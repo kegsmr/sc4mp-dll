@@ -47,13 +47,25 @@ JsonWriter& JsonWriter::Add(const char* key, const std::string& value)
 
 JsonWriter& JsonWriter::Add(const char* key, const char* value)
 {
-	return Add(key, std::string(value ? value : ""));
+	if (!value)
+	{
+		return Add(key, std::string());
+	}
+
+	return Add(key, std::string(value));
 }
 
 JsonWriter& JsonWriter::Add(const char* key, bool value)
 {
 	AddKey(key);
-	body += value ? "true" : "false";
+	if (value)
+	{
+		body += "true";
+	}
+	else
+	{
+		body += "false";
+	}
 	return *this;
 }
 
