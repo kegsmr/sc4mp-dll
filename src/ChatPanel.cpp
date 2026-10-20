@@ -949,7 +949,12 @@ void ChatPanel::AddLine(const Notice& notice)
 {
 	const std::string& text = notice.text;
 	bool chat = !notice.name.empty();
-	int color = chat ? FindNameColor(notice.color) : -1;
+	int color = -1;
+	if (chat)
+	{
+		color = FindNameColor(notice.color);
+	}
+
 	std::string namePrefix = notice.name + ":";
 	bool first = true;
 
@@ -1149,7 +1154,13 @@ void ChatPanel::ShowLines()
 
 	for (size_t i = 0; i < kLineCount; i++)
 	{
-		ShowLine(static_cast<uint32_t>(i), i < blank ? nullptr : &lines[i - blank], open);
+		const Line* line = nullptr;
+		if (i >= blank)
+		{
+			line = &lines[i - blank];
+		}
+
+		ShowLine(static_cast<uint32_t>(i), line, open);
 	}
 }
 
@@ -1181,10 +1192,24 @@ void ChatPanel::ShowLine(uint32_t row, const Line* line, bool open)
 		pText->SetW(pRow->GetW() - indent);
 	}
 
-	SetText(kFirstLineID + row, chat ? line->text : std::string());
+	if (chat)
+	{
+		SetText(kFirstLineID + row, line->text);
+	}
+	else
+	{
+		SetText(kFirstLineID + row, std::string());
+	}
 	SetChildVisible(kFirstLineID + row, open && chat);
 
-	SetText(kFirstInfoLineID + row, info ? line->text : std::string());
+	if (info)
+	{
+		SetText(kFirstInfoLineID + row, line->text);
+	}
+	else
+	{
+		SetText(kFirstInfoLineID + row, std::string());
+	}
 	SetChildVisible(kFirstInfoLineID + row, open && info);
 
 	for (int color = 0; color < kNameColorCount; color++)
