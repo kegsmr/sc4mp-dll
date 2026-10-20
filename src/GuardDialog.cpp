@@ -40,6 +40,7 @@ static constexpr uint32_t kOwnerLineIDs[] = { 0x7B3E9AC4, 0x7B3E9AD0, 0x7B3E9AD1
 static constexpr uint32_t kBelowOwnerIDs[] = { 0x7B3E9AC5, 0x7B3E9AC6, kBackButtonID, kStayButtonID };
 static constexpr int32_t kLineWidth = 284;	// the owner lines' text windows (in GenBodyMedium), less their gutters
 static constexpr int32_t kLineHeight = 18;
+static constexpr int32_t kTitleBandHeight = 34;	// the frame's title band, by which the warning is dragged
 
 static constexpr uint32_t kGZWinMessageCommand = 3;
 static constexpr uint32_t kGZWinCommandButtonClicked = 0x287259F6;
@@ -161,6 +162,7 @@ void GuardDialog::Post(const std::string& owner, const std::string& city, const 
 void GuardDialog::Detach()
 {
 	closeRequested = false;
+	StopDragging();
 
 	if (pWin)
 	{
@@ -362,6 +364,7 @@ bool GuardDialog::Click(uint32_t buttonID)
 // Hides the warning right away, and removes it on the next frame
 void GuardDialog::Close()
 {
+	StopDragging();
 	if (pWin)
 	{
 		pWin->HideWindow();
@@ -421,12 +424,24 @@ bool GuardDialog::HandleMouse(HWND hWnd, UINT uMsg, LPARAM lParam)
 	case WM_MOUSEHWHEEL:
 		// Its position is on the screen, unlike the buttons'
 		return ScreenToClient(hWnd, &point) && IsOnDialog(point.x, point.y);
-	default:
+	case WM_MOUSEMOVE:
+		if (dragging)
+		{
+			Drag(point.x, point.y);
+			return true;
+		}
 		return false;	// moving is left to the game, which shows the buttons' hover art
+	default:
+		return false;
 	}
 
 	if (!down)
 	{
+		if (button == MK_LBUTTON)
+		{
+			StopDragging();
+		}
+
 		// The release goes where the press went
 		bool pressedOnDialog = (buttonsDown & button) != 0;
 		buttonsDown &= ~button;
@@ -442,10 +457,92 @@ bool GuardDialog::HandleMouse(HWND hWnd, UINT uMsg, LPARAM lParam)
 
 	if (button == MK_LBUTTON)
 	{
-		Click(GetButtonAt(point.x, point.y));
+		uint32_t clicked = GetButtonAt(point.x, point.y);
+		if (clicked)
+		{
+			Click(clicked);
+		}
+		else
+		{
+			StartDragging(hWnd, point.x, point.y);
+		}
 	}
 
 	return true;
+}
+
+// The game's own window dragging never sees the presses taken above, so the warning is dragged by its title band here
+void GuardDialog::StartDragging(HWND hWnd, int32_t x, int32_t y)
+{
+	int32_t left = 0;
+	int32_t top = 0;
+	GetOrigin(left, top);
+	if (y - top >= kTitleBandHeight)
+	{
+		return;
+	}
+
+	dragging = true;
+	dragX = x - left;
+	dragY = y - top;
+
+	// So a fast drag that leaves the game window still ends with this warning's release
+	SetCapture(hWnd);
+	dragCapture = hWnd;
+}
+
+// Moves the warning to follow the mouse, keeping it inside the view
+void GuardDialog::Drag(int32_t x, int32_t y)
+{
+	cIGZWin* pView = nullptr;
+	if (pWin)
+	{
+		pView = pWin->GetParentWin();
+	}
+	if (!pView || GetKeyState(VK_LBUTTON) >= 0)
+	{
+		StopDragging();	// the release was missed, eg. the game lost the focus
+		return;
+	}
+
+	int32_t left = 0;
+	int32_t top = 0;
+	GetOrigin(left, top);
+
+	// Its place is in the view, whose origin is the warning's in the game window less its own place
+	int32_t newLeft = x - dragX - (left - pWin->GetL());
+	int32_t newTop = y - dragY - (top - pWin->GetT());
+	if (newLeft > pView->GetW() - pWin->GetW())
+	{
+		newLeft = pView->GetW() - pWin->GetW();
+	}
+	if (newTop > pView->GetH() - pWin->GetH())
+	{
+		newTop = pView->GetH() - pWin->GetH();
+	}
+	if (newLeft < 0)
+	{
+		newLeft = 0;
+	}
+	if (newTop < 0)
+	{
+		newTop = 0;
+	}
+
+	// The pinned gzcom-dll's GZWinMoveTo moves a window by an offset (see GZWinInterfaces.h)
+	pWin->GZWinMoveTo(newLeft - pWin->GetL(), newTop - pWin->GetT());
+	pView->InvalidateSelf();
+}
+
+void GuardDialog::StopDragging()
+{
+	if (dragCapture && GetCapture() == dragCapture)
+	{
+		ReleaseCapture();
+	}
+
+	dragging = false;
+	dragCapture = nullptr;
 }
 
 // Whether a point in the game window is on the warning, and no dialog of the game's has the mouse

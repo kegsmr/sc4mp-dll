@@ -11,6 +11,8 @@
 #include "cIGZWin.h"
 #include "cIGZWinBtn.h"
 #include "cIGZWinMgr.h"
+#include "cISC4App.h"
+#include "cISC4City.h"
 #include "cRZAutoRefCount.h"
 #include "cRZBaseString.h"
 #include "cRZCOMDllDirector.h"
@@ -48,6 +50,7 @@ static constexpr uint32_t kChipTextID = 0x7B3E9AA1;
 static constexpr uint32_t kChipIconOffset = 0x10;	// each status icon on the chip has the ID of the title bar's one plus this
 static constexpr int32_t kChipWidth = 88;
 static constexpr int32_t kChipHeight = 32;
+static constexpr int32_t kTitleBandHeight = 34;	// the frame's title band, by which the panel is dragged
 static constexpr int32_t kChipRightMargin = 12;
 static constexpr int32_t kChipBottomMargin = 48;	// above the city view's news ticker
 
@@ -304,9 +307,12 @@ void ChatPanel::Attach(cIGZWin* pNewParent)
 		Log::Line("The chat panel isn't a GZWinGen, so its buttons won't work");
 	}
 
-	// Where the UI script puts the open panel
-	openLeft = pWin->GetL();
-	openTop = pWin->GetT();
+	// Where the UI script puts the open panel, unless the player has dragged it somewhere this game
+	if (!moved)
+	{
+		openLeft = pWin->GetL();
+		openTop = pWin->GetT();
+	}
 	openWidth = pWin->GetW();
 	openHeight = pWin->GetH();
 
@@ -329,6 +335,7 @@ void ChatPanel::Detach()
 	typing = false;
 	input.clear();
 	buttonsDown = 0;
+	StopDragging();
 
 	if (pWin)
 	{
@@ -451,8 +458,8 @@ bool ChatPanel::OnTick(uint32_t unknown1)
 		ShowStatus();
 	}
 
-	// The corner moves when the game's resolution changes
-	if (pWin && pParent && minimized && (pParent->GetW() != parentWidth || pParent->GetH() != parentHeight))
+	// The corner moves when the game's resolution changes, and the open panel is kept inside the view
+	if (pWin && pParent && (pParent->GetW() != parentWidth || pParent->GetH() != parentHeight))
 	{
 		Layout();
 	}
@@ -540,7 +547,7 @@ LRESULT ChatPanel::FilterMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 	{
 		if (GameWantsEnter())
 		{
-			Log::Line("Enter was left to the game, since one of its dialogs or text boxes has it");
+			Log::Line("Enter was left to the game, since one of its dialogs or text boxes has it, or the player is driving");
 		}
 		else
 		{
@@ -591,12 +598,24 @@ bool ChatPanel::HandleMouse(HWND hWnd, UINT uMsg, LPARAM lParam)
 	case WM_MOUSEHWHEEL:
 		// So the wheel doesn't zoom the map under the panel. Its position is on the screen, unlike the buttons'.
 		return ScreenToClient(hWnd, &point) && IsOnPanel(point.x, point.y);
-	default:
+	case WM_MOUSEMOVE:
+		if (dragging)
+		{
+			Drag(point.x, point.y);
+			return true;
+		}
 		return false;	// moving is left to the game, which shows the buttons' tooltips and hover art
+	default:
+		return false;
 	}
 
 	if (!down)
 	{
+		if (button == MK_LBUTTON)
+		{
+			StopDragging();
+		}
+
 		// The release goes where the press went, even if the panel has moved since (eg. the chip opened it),
 		// so neither the game nor the panel gets half a click
 		bool pressedOnPanel = (buttonsDown & button) != 0;
@@ -620,10 +639,104 @@ bool ChatPanel::HandleMouse(HWND hWnd, UINT uMsg, LPARAM lParam)
 	// Done on the press rather than the release, so there's no pressed button to keep track of
 	if (button == MK_LBUTTON)
 	{
-		Click(GetButtonAt(point.x, point.y));
+		uint32_t clicked = GetButtonAt(point.x, point.y);
+		if (clicked)
+		{
+			Click(clicked);
+		}
+		else
+		{
+			StartDragging(hWnd, point.x, point.y);
+		}
 	}
 
 	return true;
+}
+
+// The game's own window dragging never sees the presses taken above, so the panel is dragged by its title band here,
+// like the game's dialogs. The status icon there keeps its tooltip, so it isn't a handle.
+void ChatPanel::StartDragging(HWND hWnd, int32_t x, int32_t y)
+{
+	int32_t left = 0;
+	int32_t top = 0;
+	GetPanelOrigin(left, top);
+	if (minimized || y - top >= kTitleBandHeight || IsOnChild(kStatusTipID, x, y))
+	{
+		return;
+	}
+
+	dragging = true;
+	dragX = x - left;
+	dragY = y - top;
+
+	// So a fast drag that leaves the game window still ends with this panel's release
+	SetCapture(hWnd);
+	dragCapture = hWnd;
+}
+
+// Moves the panel to follow the mouse, keeping it inside the view, and remembers the place for the rest of the game
+void ChatPanel::Drag(int32_t x, int32_t y)
+{
+	if (!pWin || minimized || GetKeyState(VK_LBUTTON) >= 0)
+	{
+		StopDragging();	// the release was missed, eg. the game lost the focus
+		return;
+	}
+
+	int32_t left = 0;
+	int32_t top = 0;
+	GetPanelOrigin(left, top);
+
+	// The panel's place is in its view, whose origin is the panel's in the game window less its own place
+	openLeft = x - dragX - (left - pWin->GetL());
+	openTop = y - dragY - (top - pWin->GetT());
+	ClampToView(openLeft, openTop);
+	PlaceWindow(pWin, openLeft, openTop);
+	moved = true;
+
+	if (pParent)
+	{
+		pParent->InvalidateSelf();	// where the panel was has to be redrawn
+	}
+}
+
+void ChatPanel::StopDragging()
+{
+	if (dragCapture && GetCapture() == dragCapture)
+	{
+		ReleaseCapture();
+	}
+
+	dragging = false;
+	dragCapture = nullptr;
+}
+
+// Keeps the open panel's place inside its view
+void ChatPanel::ClampToView(int32_t& left, int32_t& top) const
+{
+	if (!pParent)
+	{
+		return;
+	}
+
+	int32_t maxLeft = pParent->GetW() - openWidth;
+	int32_t maxTop = pParent->GetH() - openHeight;
+	if (left > maxLeft)
+	{
+		left = maxLeft;
+	}
+	if (top > maxTop)
+	{
+		top = maxTop;
+	}
+	if (left < 0)
+	{
+		left = 0;
+	}
+	if (top < 0)
+	{
+		top = 0;
+	}
 }
 
 // Whether a point in the game window (where the mouse messages are) is on the panel, and the panel is on top there
@@ -693,23 +806,29 @@ void ChatPanel::GetPanelOrigin(int32_t& left, int32_t& top) const
 // Returns the ID of the shown button at a point in the game window, or 0 if there's none
 uint32_t ChatPanel::GetButtonAt(int32_t x, int32_t y) const
 {
-	int32_t left = 0;
-	int32_t top = 0;
-	GetPanelOrigin(left, top);
-	x -= left;
-	y -= top;
-
 	for (uint32_t id : kButtonIDs)
 	{
-		cIGZWin* pButton = pWin->GetChildWindowFromID(id);
-		if (pButton && pButton->IsVisible()
-			&& x >= pButton->GetL() && y >= pButton->GetT() && x < pButton->GetL() + pButton->GetW() && y < pButton->GetT() + pButton->GetH())
+		if (IsOnChild(id, x, y))
 		{
 			return id;
 		}
 	}
 
 	return 0;
+}
+
+// Whether a point in the game window is on one of the panel's shown windows
+bool ChatPanel::IsOnChild(uint32_t id, int32_t x, int32_t y) const
+{
+	int32_t left = 0;
+	int32_t top = 0;
+	GetPanelOrigin(left, top);
+	x -= left;
+	y -= top;
+
+	cIGZWin* pChild = pWin->GetChildWindowFromID(id);
+	return pChild && pChild->IsVisible()
+		&& x >= pChild->GetL() && y >= pChild->GetT() && x < pChild->GetL() + pChild->GetW() && y < pChild->GetT() + pChild->GetH();
 }
 
 // Takes the keys while the player types, so the game doesn't also act on them (eg. B for bulldoze)
@@ -871,7 +990,7 @@ void ChatPanel::PauseTyping()
 	ShowInput();
 }
 
-// Whether Enter is meant for the game instead, eg. to finish typing a cheat code or close a message box
+// Whether Enter is meant for the game instead, eg. to finish typing a cheat code, close a message box or in U-Drive-It
 bool ChatPanel::GameWantsEnter() const
 {
 	cIGZWinMgrPtr pWinMgr;
@@ -883,6 +1002,26 @@ bool ChatPanel::GameWantsEnter() const
 	if (pWinMgr->IsModal())
 	{
 		return true;
+	}
+
+	// U-Drive-It binds Enter to "Alternate Special", in its key bindings (0x0C0EAAD0), while the player drives
+	cISC4AppPtr pApp;
+	cISC4City* pCity = nullptr;
+	if (pApp)
+	{
+		pCity = pApp->GetCity();
+	}
+	if (pCity)
+	{
+		intptr_t managers[] = { pCity->GetVehicleManager(), pCity->GetAircraftManager(), pCity->GetWatercraftManager() };
+		for (intptr_t manager : managers)
+		{
+			cISC4AutomataManager* pManager = reinterpret_cast<cISC4AutomataManager*>(manager);
+			if (pManager && pManager->IsDrivingMode())
+			{
+				return true;
+			}
+		}
 	}
 
 	cIGZWin* pFocus = pWinMgr->GZGetFocus();
@@ -1010,14 +1149,19 @@ void ChatPanel::Layout()
 	pWin->SetW(width);
 	pWin->SetH(height);
 
-	if (minimized && pParent)
+	if (pParent)
 	{
 		parentWidth = pParent->GetW();
 		parentHeight = pParent->GetH();
+	}
+
+	if (minimized && pParent)
+	{
 		PlaceWindow(pWin, parentWidth - kChipWidth - kChipRightMargin, parentHeight - kChipHeight - kChipBottomMargin);
 	}
 	else
 	{
+		ClampToView(openLeft, openTop);
 		PlaceWindow(pWin, openLeft, openTop);
 	}
 

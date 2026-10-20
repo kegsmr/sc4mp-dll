@@ -62,6 +62,9 @@ private:
 	bool IsOnDialog(int32_t x, int32_t y) const;
 	void GetOrigin(int32_t& left, int32_t& top) const;
 	uint32_t GetButtonAt(int32_t x, int32_t y) const;
+	void StartDragging(HWND hWnd, int32_t x, int32_t y);
+	void Drag(int32_t x, int32_t y);
+	void StopDragging();
 	void ShowOwner(const std::string& text);
 	void SetText(uint32_t id, const std::string& text);
 	bool SetMouseFilter(bool add);
@@ -76,6 +79,10 @@ private:
 
 	cIGZWin* pParent = nullptr;
 	cIGZWin* pWin = nullptr;	// the warning, while it's shown
+	bool dragging = false;
+	int32_t dragX = 0;	// where the warning was grabbed, from its top left corner
+	int32_t dragY = 0;
+	HWND dragCapture = nullptr;
 	uint32_t buttonsDown = 0;	// the mouse buttons pressed on the warning, whose release is kept from the game too
 
 	std::mutex inboxMutex;

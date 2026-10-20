@@ -67,6 +67,11 @@ private:
 	bool IsOnPanel(int32_t x, int32_t y);
 	void GetPanelOrigin(int32_t& left, int32_t& top) const;
 	uint32_t GetButtonAt(int32_t x, int32_t y) const;
+	bool IsOnChild(uint32_t id, int32_t x, int32_t y) const;
+	void StartDragging(HWND hWnd, int32_t x, int32_t y);
+	void Drag(int32_t x, int32_t y);
+	void StopDragging();
+	void ClampToView(int32_t& left, int32_t& top) const;
 	bool HandleTypingKey(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 	void Type(wchar_t c);
 	void Paste(HWND hWnd);
@@ -119,6 +124,11 @@ private:
 	int32_t openHeight = 0;
 	int32_t parentWidth = 0;	// the view's size when the panel was last placed in its corner
 	int32_t parentHeight = 0;
+	bool moved = false;	// the player dragged the open panel, to openLeft and openTop, which are kept while the game runs
+	bool dragging = false;
+	int32_t dragX = 0;	// where the panel was grabbed, from its top left corner
+	int32_t dragY = 0;
+	HWND dragCapture = nullptr;
 	uint32_t buttonsDown = 0;	// the mouse buttons (MK_LBUTTON, etc.) pressed on the panel, whose release is kept from the game too
 	bool loggedCoveredClick = false;
 
