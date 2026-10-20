@@ -18,7 +18,6 @@
 
 #include <cwchar>
 #include <iterator>
-#include <sstream>
 #include <vector>
 #include <windowsx.h>
 
@@ -196,18 +195,32 @@ static int32_t EstimateWidth(const std::wstring& text)
 // Returns the name color (in kNameColors) nearest to the launcher's, which comes as "[red,green,blue]", or -1 if there's none
 static int FindNameColor(const std::string& color)
 {
-	std::string numbers = color;
-	for (char& c : numbers)
+	// Read by hand rather than with a string stream, which would make the DLL a lot bigger
+	int rgb[3]{};
+	int count = 0;
+	bool inNumber = false;
+	for (char c : color)
 	{
-		if (c < '0' || c > '9')
+		if (c >= '0' && c <= '9')
 		{
-			c = ' ';
+			if (!inNumber)
+			{
+				if (count == 3)
+				{
+					break;
+				}
+				count++;
+				inNumber = true;
+			}
+			rgb[count - 1] = rgb[count - 1] * 10 + (c - '0');
+		}
+		else
+		{
+			inNumber = false;
 		}
 	}
 
-	int rgb[3]{};
-	std::istringstream stream(numbers);
-	if (!(stream >> rgb[0] >> rgb[1] >> rgb[2]))
+	if (count < 3)
 	{
 		return -1;
 	}
