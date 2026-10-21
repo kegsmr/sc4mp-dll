@@ -70,7 +70,9 @@ static constexpr int32_t kSavedDialogScanTop = 120;	// the middle of the game is
 static constexpr int32_t kSavedDialogScanStep = 20;
 static constexpr ULONGLONG kSavedDialogInterval = 100;	// how often it's looked for on the game window's messages
 static constexpr int32_t kSavedDialogStep = 6;		// the spacing of the points it's searched at
-static constexpr ULONGLONG kChipMoveDelay = 500;	// how long that has to stay so before the chip moves, so it doesn't flicker
+static constexpr ULONGLONG kChipMoveDelay = 500;
+static constexpr uint32_t kPuckID = 0x0987B48F;	// the city view's control panel (ui C973B411), which hides with the game's UI
+static constexpr ULONGLONG kUICheckInterval = 250;	// how long that has to stay so before the chip moves, so it doesn't flicker
 
 // The launcher's colors for player names (CHAT_NAME_COLORS in sc4mpclient.py), in the same order, as the name windows in the UI script have them.
 // A few are a little darker than the launcher's, to read on the panel's background. The launcher sends a name's color, and the nearest of these is used.
@@ -298,6 +300,7 @@ void ChatPanel::Attach(cIGZWin* pNewParent, bool region)
 {
 	Detach();
 	regionView = region;
+	uiHidden = false;
 	chipSpot = ChipSpot::Home;
 	wantedChipSpot = ChipSpot::Home;
 
@@ -498,6 +501,7 @@ bool ChatPanel::OnTick(uint32_t unknown1)
 	}
 
 	AvoidCoveringWindows();
+	FollowGameUI();
 
 	CheckSavedDialog(false);
 
@@ -581,9 +585,9 @@ LRESULT ChatPanel::FilterMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 	gameWindow = hWnd;
 	CheckSavedDialog(true);
 
-	if (!pWin)
+	if (!pWin || uiHidden)
 	{
-		return 0;	// no panel in this view
+		return 0;	// no panel in this view, or it's hidden with the game's UI
 	}
 
 	if (uMsg >= WM_MOUSEFIRST && uMsg <= WM_MOUSELAST)
@@ -1046,6 +1050,54 @@ void ChatPanel::ResetCaret()
 {
 	caretShown = true;
 	caretTime = GetTickCount64();
+}
+
+// Whether the player hid the city view's UI (with the corner button on its control panel, or Num Lock), eg. for a
+// screenshot. The game hides its control panel then, which is looked for, since the command isn't seen here.
+bool ChatPanel::IsGameUIHidden()
+{
+	cIGZWinMgrPtr pWinMgr;
+	if (!pWinMgr || !pWinMgr->GetMainWindow())
+	{
+		return false;
+	}
+
+	cIGZWin* pPuck = pWinMgr->GetMainWindow()->GetChildWindowFromIDRecursive(kPuckID);
+	return pPuck && !pPuck->IsVisible();
+}
+
+// Hides the panel (or its round button) with the game's UI, and shows it again with it. New messages are still
+// counted meanwhile.
+void ChatPanel::FollowGameUI()
+{
+	ULONGLONG now = GetTickCount64();
+	if (!pWin || regionView || now - lastUICheck < kUICheckInterval)
+	{
+		return;
+	}
+	lastUICheck = now;
+
+	bool hidden = IsGameUIHidden();
+	if (hidden == uiHidden)
+	{
+		return;
+	}
+	uiHidden = hidden;
+
+	if (hidden)
+	{
+		if (typing)
+		{
+			PauseTyping();	// the keys go back to the game, and the text is kept
+		}
+		StopDragging();
+		pWin->HideWindow();
+	}
+	else
+	{
+		pWin->ShowWindow();
+		Layout();
+	}
 }
 
 void ChatPanel::HideSavedDialog()

@@ -114,5 +114,7 @@ private:
 	std::string warnedPath;	// the open city's savegame, if it was warned about, so the launcher's own check doesn't warn again
 	ULONGLONG cityOpenedTime = 0;	// when the city opened, until the game's first dialog after it is logged
 	ULONGLONG openedTime = 0;	// when the city opened
-	bool waitingForGame = false;	// the warning is hidden until the game's own dialog is answered
+	bool waitingForGame = false;
+	bool uiHidden = false;	// hidden with the game's UI
+	ULONGLONG lastUICheck = 0;	// the warning is hidden until the game's own dialog is answered
 };

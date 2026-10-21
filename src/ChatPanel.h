@@ -50,6 +50,9 @@ public:
 	// until the server takes it, which the panel's status shows. Called after the game saves.
 	void HideSavedDialog();
 
+	// Whether the player hid the city view's UI, which the panel and the claimed city warning hide with
+	static bool IsGameUIHidden();
+
 	// Shows the launcher's save status (eg. "saved", with "Saved 13:01") and the server's name as the title. Safe to call from any thread.
 	void PostStatus(const std::string& state, const std::string& text);
 	void PostServerName(const std::string& name);
@@ -75,6 +78,7 @@ private:
 	bool IsOnChild(uint32_t id, int32_t x, int32_t y) const;
 	void CheckSavedDialog(bool fromMessage);
 	void ResetCaret();
+	void FollowGameUI();
 	void CloseSavedDialog();
 	void StartDragging(HWND hWnd, int32_t x, int32_t y);
 	void Drag(int32_t x, int32_t y);
@@ -151,7 +155,9 @@ private:
 	int32_t openHeight = 0;
 	int32_t parentWidth = 0;	// the view's size when the panel was last placed in its corner
 	int32_t parentHeight = 0;
-	bool regionView = false;	// in the region view, the top right corner is below its top bar
+	bool regionView = false;
+	bool uiHidden = false;	// hidden with the game's UI
+	ULONGLONG lastUICheck = 0;	// in the region view, the top right corner is below its top bar
 	ChipSpot chipSpot = ChipSpot::Home;
 	ChipSpot wantedChipSpot = ChipSpot::Home;
 	ULONGLONG wantedSince = 0;	// when the chip first wanted to move to wantedChipSpot

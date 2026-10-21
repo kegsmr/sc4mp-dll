@@ -1,4 +1,5 @@
 #include "GuardDialog.h"
+#include "ChatPanel.h"
 #include "GZWinInterfaces.h"
 #include "Log.h"
 #include "Text.h"
@@ -354,7 +355,28 @@ bool GuardDialog::OnTick(uint32_t unknown1)
 		waitingForGame = true;
 		pWin->HideWindow();
 	}
-	if (pWin && waitingForGame && !IsGameModal())
+	// Hidden with the game's UI (eg. for a screenshot), like the chat panel
+	if (pWin && GetTickCount64() - lastUICheck >= 250)
+	{
+		lastUICheck = GetTickCount64();
+		bool hidden = ChatPanel::IsGameUIHidden();
+		if (hidden != uiHidden)
+		{
+			uiHidden = hidden;
+			if (hidden)
+			{
+				StopDragging();
+				pWin->HideWindow();
+			}
+			else if (!waitingForGame)
+			{
+				pWin->PullToFront();
+				pWin->ShowWindow();
+			}
+		}
+	}
+
+	if (pWin && waitingForGame && !IsGameModal() && !uiHidden)
 	{
 		waitingForGame = false;
 		pWin->PullToFront();
@@ -469,8 +491,14 @@ void GuardDialog::Show(const Warning& warning)
 	int32_t dy = (pParent->GetH() - pWin->GetH()) / 2 - pWin->GetT();
 	pWin->GZWinMoveTo(dx, dy);
 
-	// It waits, hidden, while one of the game's dialogs is up (see OnTick)
-	if (IsGameModal())
+	// It waits, hidden, while one of the game's dialogs is up (see OnTick), or while the game's UI is hidden
+	uiHidden = ChatPanel::IsGameUIHidden();
+	lastUICheck = GetTickCount64();
+	if (uiHidden)
+	{
+		pWin->HideWindow();
+	}
+	else if (IsGameModal())
 	{
 		waitingForGame = true;
 		pWin->HideWindow();
