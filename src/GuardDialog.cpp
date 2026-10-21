@@ -619,7 +619,8 @@ void GuardDialog::StartDragging(int32_t x, int32_t y)
 	cIGZWinMgrPtr pWinMgr;
 	if (pWinMgr)
 	{
-		pWinMgr->GZSetCapture(pWin);
+		bool captured = pWinMgr->GZSetCapture(pWin);
+		Log::Line("DIAG warning capture " + std::to_string(captured) + " at " + std::to_string(x) + "," + std::to_string(y));
 	}
 }
 
@@ -637,6 +638,7 @@ void GuardDialog::Drag(int32_t x, int32_t y)
 		return;
 	}
 
+	Log::Line("DIAG warning drag " + std::to_string(x) + "," + std::to_string(y));
 	// The point is from the warning's top left corner, which moves with it
 	int32_t newLeft = pWin->GetL() + x - dragX;
 	int32_t newTop = pWin->GetT() + y - dragY;
@@ -664,6 +666,7 @@ void GuardDialog::Drag(int32_t x, int32_t y)
 
 void GuardDialog::StopDragging()
 {
+	Log::Line("DIAG warning stop dragging");
 	cIGZWinMgrPtr pWinMgr;
 	if (dragging && pWin && pWinMgr && pWinMgr->GZGetCapture() == pWin)
 	{
