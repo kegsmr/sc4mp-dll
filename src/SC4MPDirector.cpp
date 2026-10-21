@@ -322,14 +322,6 @@ private:
 
 		std::string arguments = GetArguments(line);
 
-		// Logged, to find out why these don't arrive in the region view
-		std::string logged = "Cheat code: \"" + line + "\"";
-		if (!pCheatText)
-		{
-			logged += " (no text)";
-		}
-		Log::Line(logged);
-
 		if (cheatID == kCheatSay)
 		{
 			if (arguments.empty())

@@ -202,9 +202,6 @@ private:
 	int32_t resizeWidth = 0;
 	int32_t resizeHeight = 0;
 	size_t resizeLineCount = 0;
-	bool loggedWheel = false;	// the wheel's first message is logged, since what it holds isn't sure
-	bool loggedCharacter = false;	// and so are the first character and key press on the panel
-	bool loggedKeyDown = false;
 	ULONGLONG savedDialogDeadline = 0;	// until when the game's "City Saved." is looked for, after a save
 	ULONGLONG lastSavedDialogCheck = 0;
 	HWND gameWindow = nullptr;	// the game's window, from the messages it gets

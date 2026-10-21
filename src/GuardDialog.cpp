@@ -207,8 +207,7 @@ void GuardDialog::CityOpened(const std::string& path)
 {
 	warnedPath.clear();
 	renamedPath.clear();
-	cityOpenedTime = GetTickCount64();
-	openedTime = cityOpenedTime;
+	openedTime = GetTickCount64();
 
 	std::optional<Warning> claim;
 	{
@@ -338,22 +337,6 @@ bool GuardDialog::OnTick(uint32_t unknown1)
 	if (!newTakeoverPath.empty())
 	{
 		TakeOver(newTakeoverPath, newTakeoverMayor);
-	}
-
-	// Logs when the game's first dialog after the city opened (eg. to reconcile the edges) comes, to check the order
-	if (cityOpenedTime)
-	{
-		cIGZWinMgrPtr pWinMgr;
-		ULONGLONG elapsed = GetTickCount64() - cityOpenedTime;
-		if (pWinMgr && pWinMgr->IsModal())
-		{
-			Log::Line("The game showed a dialog " + std::to_string(elapsed) + " ms after the city opened");
-			cityOpenedTime = 0;
-		}
-		else if (elapsed > 30000)
-		{
-			cityOpenedTime = 0;
-		}
 	}
 
 	// The game's own prompt just after the city opens comes first, since it's modal and in front: the warning waits for

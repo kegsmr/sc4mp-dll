@@ -112,9 +112,8 @@ private:
 	std::string renamedPath;	// the open city's savegame, if its mayor name was set, so it's set once per open
 
 	std::string warnedPath;	// the open city's savegame, if it was warned about, so the launcher's own check doesn't warn again
-	ULONGLONG cityOpenedTime = 0;	// when the city opened, until the game's first dialog after it is logged
 	ULONGLONG openedTime = 0;	// when the city opened
-	bool waitingForGame = false;
+	bool waitingForGame = false;	// the warning is hidden until the game's own dialog is answered
 	bool uiHidden = false;	// hidden with the game's UI
-	ULONGLONG lastUICheck = 0;	// the warning is hidden until the game's own dialog is answered
+	ULONGLONG lastUICheck = 0;
 };

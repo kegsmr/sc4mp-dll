@@ -819,13 +819,6 @@ void ChatPanel::Wheel(const cGZMessage& msg)
 	// Only the low word is the turn (like WM_MOUSEWHEEL's), so a turn down isn't read as a big turn up
 	int32_t delta = static_cast<int16_t>(msg.dwData3 & 0xFFFF);
 
-	// Once a game, since what the message holds was only seen once
-	if (!loggedWheel)
-	{
-		Log::Line("The mouse wheel on the chat panel: d1=0x" + ToHex(msg.dwData1) + " d2=0x" + ToHex(msg.dwData2) + " d3=0x" + ToHex(msg.dwData3) + " (" + std::to_string(delta) + ")");
-		loggedWheel = true;
-	}
-
 	if (minimized)
 	{
 		return;
@@ -1398,18 +1391,6 @@ bool ChatPanel::IsOnChild(uint32_t id, int32_t x, int32_t y) const
 // doesn't also act on them (eg. B for bulldoze).
 bool ChatPanel::HandleKey(const cGZMessage& msg)
 {
-	// Once a game, since what the messages hold wasn't seen in game yet
-	if (msg.dwMessageType == kGZWinMessageCharacter && !loggedCharacter)
-	{
-		Log::Line("A character on the chat panel: d1=0x" + ToHex(msg.dwData1) + " d2=0x" + ToHex(msg.dwData2) + " d3=0x" + ToHex(msg.dwData3));
-		loggedCharacter = true;
-	}
-	if (msg.dwMessageType == kGZWinMessageKeyDown && !loggedKeyDown)
-	{
-		Log::Line("A key press on the chat panel: d1=0x" + ToHex(msg.dwData1) + " d2=0x" + ToHex(msg.dwData2) + " d3=0x" + ToHex(msg.dwData3));
-		loggedKeyDown = true;
-	}
-
 	// The key filter may not see Enter's release while the panel takes it
 	if (msg.dwMessageType == kGZWinMessageKeyUp && msg.dwData1 == VK_RETURN)
 	{
