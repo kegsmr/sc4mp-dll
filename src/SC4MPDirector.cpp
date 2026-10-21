@@ -114,6 +114,7 @@ public:
 		bridge.SetNotifyHandler([this](const std::string& text, bool history, const std::string& name, const std::string& color, bool own) { chat.Post(text, history, name, color, own); });
 		bridge.SetStatusHandler([this](const std::string& state, const std::string& text) { chat.PostStatus(state, text); });
 		bridge.SetServerHandler([this](const std::string& name) { chat.PostServerName(name); });
+		bridge.SetProgressHandler([this](const std::string& text) { chat.PostProgress(text); });
 		bridge.SetGuardHandler([this](const std::string& owner, const std::string& city, const std::string& path) { guard.Post(owner, city, path); });
 		bridge.SetAlertHandler([this](const std::string& title, const std::string& text) { guard.PostAlert(title, text); });
 		bridge.SetClaimHandler([this](bool reset, const std::string& owner, const std::string& city, const std::string& path) { guard.PostClaim(reset, owner, city, path); });

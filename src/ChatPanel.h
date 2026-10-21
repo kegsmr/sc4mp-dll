@@ -43,7 +43,8 @@ public:
 	void StartTyping();
 
 	// Adds a line from the launcher. Safe to call from any thread. History lines (sent on connecting) don't count as unread.
-	// Chat comes with the player's name, which starts the text, and the launcher's color for it (eg. "[46,125,50]"). Other lines are shown in grey.
+	// Chat comes with the player's name, which starts the text, and the launcher's color for it (eg. "[46,125,50]"). Other lines are shown in grey,
+	// or in green or red if the launcher gives them a color (save results).
 	void Post(const std::string& text, bool history, const std::string& name = std::string(), const std::string& color = std::string(), bool own = false);
 
 	// Closes the game's "City Saved." message box if it shows within a few seconds, since a city isn't really saved
@@ -56,6 +57,10 @@ public:
 	// Shows the launcher's save status (eg. "saved", with "Saved 13:01") and the server's name as the title. Safe to call from any thread.
 	void PostStatus(const std::string& state, const std::string& text);
 	void PostServerName(const std::string& name);
+
+	// Shows how far a save push is (eg. "Saving... (120/3,456KB)") as the last line, replacing the one before, until an empty
+	// `text` clears it. It isn't kept in the chat or counted as new. Safe to call from any thread.
+	void PostProgress(const std::string& text);
 
 	bool QueryInterface(uint32_t riid, void** ppvObj) override;
 	uint32_t AddRef() override;
@@ -109,6 +114,7 @@ private:
 		std::string name;
 		int color = -1;		// in kNameColors
 		bool chat = false;	// shown in navy, or in grey if not
+		int resultColor = -1;	// in kResultColors, for a save result that isn't shown in grey
 	};
 
 	void AddLine(const Notice& notice);
@@ -123,6 +129,7 @@ private:
 	void SetText(uint32_t id, const std::string& text);
 	void SetTip(uint32_t id, const std::string& text);
 	void ShowChipTip();
+	size_t GetRowCount() const;
 	size_t GetMaxScroll() const;
 	void ScrollBy(int rows);
 	void ScrollToBottom();
@@ -176,8 +183,10 @@ private:
 	std::deque<Notice> inbox;	// lines from the bridge thread, waiting for the next frame
 	std::optional<std::pair<std::string, std::string>> pendingStatus;
 	std::optional<std::string> pendingServerName;
+	std::optional<std::string> pendingProgress;
 
 	std::deque<Line> lines;	// the last kMaxLines rows, oldest first
+	std::string progress;	// the save push's progress, shown after the lines while it isn't empty
 	size_t scrollRows = 0;	// how far the player has scrolled up from the newest row
 	int32_t scrollbarValue = 0;	// the game's scrollbar's value, as last set, to see when the player moves it
 	size_t newBelow = 0;	// messages that came while scrolled up
