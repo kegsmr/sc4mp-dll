@@ -4,6 +4,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <deque>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -26,9 +27,47 @@ public:
 
 	bool IsEnabled() const;
 
+	// Called on the bridge thread with each line the launcher sends to show in game (chat, save results and alerts).
+	// `history` is true for the recent lines the launcher sends when the game connects. Chat comes with the player's `name`
+	// and the launcher's `color` for it (eg. "[46,125,50]"). Other lines have no name, and save results have a color too. Set it before Start().
+	using NotifyHandler = std::function<void(const std::string& text, bool history, const std::string& name, const std::string& color, bool own)>;
+	void SetNotifyHandler(NotifyHandler handler);
+
+	// Called on the bridge thread with the launcher's save status (eg. "saved", "Saved 13:01") and the server's name. Set them before Start().
+	using StatusHandler = std::function<void(const std::string& state, const std::string& text)>;
+	using ServerHandler = std::function<void(const std::string& name)>;
+	void SetStatusHandler(StatusHandler handler);
+	void SetServerHandler(ServerHandler handler);
+
+	// Called on the bridge thread with how far the launcher's save push is (eg. "Saving... (120/3,456KB)"), or an empty
+	// `text` when it's over. Set it before Start().
+	using ProgressHandler = std::function<void(const std::string& text)>;
+	void SetProgressHandler(ProgressHandler handler);
+
+	// Called on the bridge thread when the launcher says the city saved at `path` belongs to another mayor (`owner`). Set it before Start().
+	using GuardHandler = std::function<void(const std::string& owner, const std::string& city, const std::string& path)>;
+	void SetGuardHandler(GuardHandler handler);
+
+	// Called on the bridge thread with the launcher's alerts (eg. a save the server didn't take), to show them. Set it before Start().
+	using AlertHandler = std::function<void(const std::string& title, const std::string& text)>;
+	void SetAlertHandler(AlertHandler handler);
+
+	// Called on the bridge thread for the launcher's list of cities that belong to other mayors: once with `reset`, then
+	// once for each city. Set it before Start().
+	using ClaimHandler = std::function<void(bool reset, const std::string& owner, const std::string& city, const std::string& path)>;
+	void SetClaimHandler(ClaimHandler handler);
+
+	// Called on the bridge thread when the launcher says the player is taking over the city saved at `path` (an expired
+	// claim, or a tile nobody claims that has another mayor's name), with the player's `mayor` name. Set it before Start().
+	using TakeoverHandler = std::function<void(const std::string& path, const std::string& mayor)>;
+	void SetTakeoverHandler(TakeoverHandler handler);
+
 	// Queues a message for the launcher, adding the current time. Messages wait in the queue
 	// while the launcher isn't connected.
 	void Send(JsonWriter message);
+
+	// Whether the launcher is connected right now
+	bool IsConnected() const;
 
 private:
 	void Run();
@@ -42,6 +81,15 @@ private:
 	unsigned short port = 0;
 	std::thread thread;
 	std::atomic<bool> stopping = false;
+	std::atomic<bool> connected = false;
+	NotifyHandler notifyHandler;
+	StatusHandler statusHandler;
+	ServerHandler serverHandler;
+	ProgressHandler progressHandler;
+	GuardHandler guardHandler;
+	ClaimHandler claimHandler;
+	TakeoverHandler takeoverHandler;
+	AlertHandler alertHandler;
 
 	std::mutex mutex;
 	std::condition_variable stopped;

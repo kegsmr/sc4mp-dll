@@ -1,5 +1,7 @@
 #include "version.h"
 #include "Bridge.h"
+#include "ChatPanel.h"
+#include "GuardDialog.h"
 #include "Json.h"
 #include "Log.h"
 #include "Text.h"
@@ -10,6 +12,7 @@
 #include "cIGZMessage2Standard.h"
 #include "cIGZMessageServer2.h"
 #include "cIGZString.h"
+#include "cIGZWin.h"
 #include "cISC4App.h"
 #include "cISC4City.h"
 #include "cISC4Region.h"
@@ -26,7 +29,13 @@ static constexpr uint32_t kSC4MessageCityEstablished = 0x26D31EC4;
 static constexpr uint32_t kSC4MessagePreSave = 0x26C63343;
 static constexpr uint32_t kSC4MessagePostSave = 0x26C63345;
 static constexpr uint32_t kSC4MessagePostRegionInit = 0xCBB5BB45;
+static constexpr uint32_t kSC4MessagePreRegionShutdown = 0x8BB5BB46;
 static constexpr uint32_t kGZMessageCheatIssued = 0x230E27AC;
+
+// The game's windows that the chat panel goes in
+static constexpr uint32_t kGZWin_WinSC4App = 0x6104489A;
+static constexpr uint32_t kGZWin_SC4View3DWin = 0x9A47B417;
+static constexpr uint32_t kGZWin_SC4WinRegionScreen = 0xEA659793;
 
 // Random IDs for our cheat codes, which must not be used by any other plugin
 static constexpr uint32_t kCheatSay = 0x7B3E9A52;
@@ -36,8 +45,9 @@ static constexpr uint32_t kCheatSC4MP = 0x7B3E9A53;
 // DO NOT REUSE DIRECTOR IDS EVER.
 static constexpr uint32_t kSC4MPDirectorID = 0x51ACC690;
 
-// Reports what happens in game to the SC4MP launcher (see Bridge), and adds cheat codes for
-// talking to it: `say <message>` sends a chat message, and `sc4mp <command>` runs a launcher command.
+// Reports what happens in game to the SC4MP launcher (see Bridge), shows the chat in game (see ChatPanel),
+// and adds cheat codes for talking to the launcher: `say <message>` sends a chat message, and
+// `sc4mp <command>` runs a launcher command.
 class SC4MPDirector final : public cRZMessage2COMDirector
 {
 public:
@@ -91,6 +101,7 @@ public:
 				kSC4MessagePreSave,
 				kSC4MessagePostSave,
 				kSC4MessagePostRegionInit,
+				kSC4MessagePreRegionShutdown,
 			};
 
 			for (uint32_t messageID : messageIDs)
@@ -98,6 +109,16 @@ public:
 				pMsgServ->AddNotification(this, messageID);
 			}
 		}
+
+		// The bridge thread only queues the lines; the panel shows them on the game thread
+		bridge.SetNotifyHandler([this](const std::string& text, bool history, const std::string& name, const std::string& color, bool own) { chat.Post(text, history, name, color, own); });
+		bridge.SetStatusHandler([this](const std::string& state, const std::string& text) { chat.PostStatus(state, text); });
+		bridge.SetServerHandler([this](const std::string& name) { chat.PostServerName(name); });
+		bridge.SetProgressHandler([this](const std::string& text) { chat.PostProgress(text); });
+		bridge.SetGuardHandler([this](const std::string& owner, const std::string& city, const std::string& path) { guard.Post(owner, city, path); });
+		bridge.SetAlertHandler([this](const std::string& title, const std::string& text) { guard.PostAlert(title, text); });
+		bridge.SetClaimHandler([this](bool reset, const std::string& owner, const std::string& city, const std::string& path) { guard.PostClaim(reset, owner, city, path); });
+		bridge.SetTakeoverHandler([this](const std::string& path, const std::string& mayor) { guard.PostTakeover(path, mayor); });
 
 		// In single player, only log what happens
 		if (!bridge.Start())
@@ -108,6 +129,29 @@ public:
 
 		RegisterCheats();
 
+		chat.Start(
+			[this](const std::string& text) { SendChat(text); },
+			[this](const std::string& command) { SendCommand(command); });
+
+		// The city's view, or the region's for alerts that come after leaving the city (eg. a failed save)
+		guard.Start([]()
+		{
+			cIGZWin* pView = GetSC4AppChild(kGZWin_SC4View3DWin);
+			if (pView && pView->IsVisible())
+			{
+				return pView;
+			}
+			return GetSC4AppChild(kGZWin_SC4WinRegionScreen);
+		});
+
+		return true;
+	}
+
+	// The game's windows still exist here, but not after the app shuts down
+	bool PreAppShutdown()
+	{
+		guard.Stop();
+		chat.Stop();
 		return true;
 	}
 
@@ -135,12 +179,24 @@ public:
 			break;
 		case kSC4MessagePostSave:
 			SendCityEvent("saved", "Saved city");
+
+			// The launcher reports whether the server took the save, so the game's "City Saved." would say so too soon
+			if (bridge.IsConnected())
+			{
+				chat.HideSavedDialog();
+			}
 			break;
 		case kSC4MessagePreCityShutdown:
+			guard.Detach();
+			chat.Detach();
 			SendCityEvent("city_exited", "Exiting city");
 			break;
 		case kSC4MessagePostRegionInit:
 			RegionLoaded();
+			chat.Attach(GetSC4AppChild(kGZWin_SC4WinRegionScreen), true);
+			break;
+		case kSC4MessagePreRegionShutdown:
+			chat.Detach();
 			break;
 		case kGZMessageCheatIssued:
 			CheatIssued(pStandardMsg->GetData1(), static_cast<cIGZString*>(pStandardMsg->GetVoid2()));
@@ -170,11 +226,21 @@ private:
 			Log::Line("Loaded city in God Mode: " + name);
 		}
 
+		// The launcher finds the city's tile (and who owns it) from its savegame
+		cRZBaseString path;
+		pCity->GetCitySaveFilePath(path);
+
 		JsonWriter message;
 		message.Add("type", "city_loaded");
 		message.Add("name", name);
 		message.Add("established", established);
+		message.Add("path", Text::ToUtf8(path.ToChar()));
 		bridge.Send(message);
+
+		// Before the game's own prompts (eg. to reconcile the edges), if the launcher already said whose city it is
+		guard.CityOpened(Text::ToUtf8(path.ToChar()));
+
+		chat.Attach(GetSC4AppChild(kGZWin_SC4View3DWin), false);
 	}
 
 	// Sends an event about the open city. The current city is read from the app, since not every message carries it.
@@ -248,38 +314,86 @@ private:
 		}
 
 		// The message has the whole line that was typed, eg. "say hello everyone"
-		std::string arguments;
+		std::string line;
 		if (pCheatText)
 		{
-			arguments = GetArguments(Text::ToUtf8(pCheatText->ToChar()));
+			line = Text::ToUtf8(pCheatText->ToChar());
 		}
 
-		JsonWriter message;
+		std::string arguments = GetArguments(line);
 
 		if (cheatID == kCheatSay)
 		{
 			if (arguments.empty())
 			{
+				chat.StartTyping();	// `say` alone opens the chat panel to type in
 				return;
 			}
 
-			Log::Line("Chat: " + arguments);
-			message.Add("type", "chat");
-			message.Add("message", arguments);
+			SendChat(arguments);
 		}
 		else
 		{
 			if (arguments.empty())
 			{
-				arguments = "help";
+				SendCommand("help");
 			}
+			else
+			{
+				SendCommand(arguments);
+			}
+		}
+	}
 
-			Log::Line("Command: " + arguments);
-			message.Add("type", "command");
-			message.Add("command", arguments);
+	void SendChat(const std::string& text)
+	{
+		Log::Line("Chat: " + text);
+
+		JsonWriter message;
+		message.Add("type", "chat");
+		message.Add("message", text);
+		bridge.Send(message);
+	}
+
+	void SendCommand(const std::string& command)
+	{
+		Log::Line("Command: " + command);
+
+		JsonWriter message;
+		message.Add("type", "command");
+		message.Add("command", command);
+		bridge.Send(message);
+	}
+
+	// Returns one of the game's top windows, eg. the region screen, or nullptr if it doesn't exist right now
+	static cIGZWin* GetSC4AppChild(uint32_t id)
+	{
+		cISC4AppPtr pApp;
+		if (!pApp)
+		{
+			return nullptr;
 		}
 
-		bridge.Send(message);
+		cIGZWin* pMainWin = pApp->GetMainWindow();
+
+		cIGZWin* pSC4AppWin = nullptr;
+		if (pMainWin)
+		{
+			pSC4AppWin = pMainWin->GetChildWindowFromID(kGZWin_WinSC4App);
+		}
+
+		cIGZWin* pChild = nullptr;
+		if (pSC4AppWin)
+		{
+			pChild = pSC4AppWin->GetChildWindowFromID(id);
+		}
+
+		if (!pChild)
+		{
+			Log::Line("Unable to find the game's window for the chat panel");
+		}
+
+		return pChild;
 	}
 
 	// Returns what was typed after the cheat code, without surrounding spaces
@@ -313,6 +427,9 @@ private:
 		return Text::ToUtf8(name.ToChar());
 	}
 
+	// Declared first, so they outlive the bridge, which may still be posting to them
+	ChatPanel chat;
+	GuardDialog guard;
 	Bridge bridge;
 };
 
