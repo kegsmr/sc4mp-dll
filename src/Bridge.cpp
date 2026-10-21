@@ -311,9 +311,14 @@ void Bridge::HandleLine(const std::string& line)
 			notifyHandler(text, false, std::string(), std::string(), false);
 		}
 
-		// Shown in a dialog like the game's. Older launchers send no title, so a failed save's is made from its text.
+		// Shown in a dialog like the game's, with the launcher's title and body (which can have several lines). Older
+		// launchers send neither, so a failed save's are made from its text.
 		std::string title = message["title"];
-		std::string body = text;
+		std::string body = message["body"];
+		if (body.empty())
+		{
+			body = text;
+		}
 		const std::string failedSave = "Save push failed! ";
 		if (title.empty() && body.compare(0, failedSave.size(), failedSave) == 0)
 		{
