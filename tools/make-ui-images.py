@@ -53,6 +53,24 @@ TITLE_BUTTON_SIZE = (22, 20)	# like the game's
 
 STATES = ("disabled", "normal", "pressed", "hover")
 
+# The saving icon's hourglass on its 14 pixel disc: bars at the top and bottom, and two triangles meeting at a narrow waist
+HOURGLASS = (
+	"..............",
+	"..............",
+	"..............",
+	"....######....",
+	"....######....",
+	".....####.....",
+	"......##......",
+	"......##......",
+	".....####.....",
+	"....######....",
+	"....######....",
+	"..............",
+	"..............",
+	"..............",
+)
+
 
 def scaled(*values):
 	return [round(v * SCALE) for v in values]
@@ -235,9 +253,6 @@ def draw_status(colour, symbol, size=14):
 	elif symbol == "cross":
 		draw.line([(s * .32, s * .32), (s * .68, s * .68)], fill="white", width=w)
 		draw.line([(s * .68, s * .32), (s * .32, s * .68)], fill="white", width=w)
-	elif symbol == "arrows":
-		draw.arc([s * .26, s * .26, s * .74, s * .74], 200, 470, fill="white", width=w)
-		draw.polygon([(s * .70, s * .22), (s * .84, s * .46), (s * .56, s * .46)], fill="white")
 	elif symbol == "bang":
 		draw.line([(s * .5, s * .24), (s * .5, s * .56)], fill="white", width=w)
 		draw.ellipse([s * .43, s * .64, s * .57, s * .78], fill="white")
@@ -248,7 +263,15 @@ def draw_status(colour, symbol, size=14):
 	elif symbol == "person":
 		draw.ellipse([s * .38, s * .22, s * .62, s * .46], fill="white")
 		draw.chord([s * .26, s * .50, s * .74, s * .98], 180, 360, fill="white")
-	return image.resize((size, size), Image.LANCZOS)
+	image = image.resize((size, size), Image.LANCZOS)
+
+	# The hourglass is set pixel by pixel, since at 14 pixels a scaled down one blurs into a blob
+	if symbol == "hourglass":
+		for y, row in enumerate(HOURGLASS):
+			for x, pixel in enumerate(row):
+				if pixel == "#":
+					image.putpixel((x, y), (255, 255, 255, 255))
+	return image
 
 
 def draw_tile(colour, kind):
@@ -297,7 +320,7 @@ def make_images():
 		"ring-grey.png": draw_ring(GREY),
 		"status-tip.png": draw_status_tip(),
 		"status-saved.png": draw_status(GREEN, "check"),
-		"status-saving.png": draw_status(BLUE, "arrows"),
+		"status-saving.png": draw_status(BLUE, "hourglass"),
 		"status-failed.png": draw_status(RED, "cross"),
 		"status-not-saved.png": draw_status(AMBER, "bang"),
 		"status-connected.png": draw_status(GREEN, "dot"),
