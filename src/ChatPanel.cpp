@@ -1214,11 +1214,7 @@ bool ChatPanel::HandleKey(const cGZMessage& msg)
 
 	if (msg.dwMessageType == kGZWinMessageCharacter)
 	{
-		if (msg.dwData1 != L' ' || !spaceTyped)
-		{
-			TypeCharacter(msg.dwData1);
-		}
-		spaceTyped = false;
+		TypeCharacter(msg.dwData1);
 	}
 	else if (msg.dwMessageType == kGZWinMessageKeyDown)
 	{
@@ -1236,11 +1232,6 @@ bool ChatPanel::HandleKey(const cGZMessage& msg)
 			break;
 		case VK_ESCAPE:
 			StopTyping();
-			break;
-		case VK_SPACE:
-			// The game sends no character for the space bar (it's its pause key), so it's typed here
-			Type(L' ');
-			spaceTyped = true;
 			break;
 		case 'V':
 			if (GetKeyState(VK_CONTROL) < 0)
