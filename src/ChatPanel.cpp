@@ -59,9 +59,8 @@ static constexpr int32_t kChipWidth = 56;	// the 50 pixel button, with room for 
 static constexpr int32_t kChipHeight = 56;
 static constexpr int32_t kTitleBandHeight = 34;	// the frame's title band, by which the panel is dragged
 static constexpr int32_t kRightMargin = 12;			// the chip and the open panel are in the view's top right corner
-static constexpr int32_t kRegionTop = 66;			// below the region view's top bar and its round buttons ("..." etc.)
-static constexpr int32_t kCityTop = 16;
-static constexpr int32_t kChipBottomMargin = 48;	// above the city view's news ticker, if the chip is moved to the bottom
+static constexpr int32_t kTopMargin = 16;			// in the city view, whose corner is free
+static constexpr int32_t kChipBottomMargin = 48;	// above the city view's news ticker, and the region view's bottom bar
 static constexpr ULONGLONG kChipCheckInterval = 250;	// how often the chip checks whether a window of the game covers it
 static constexpr uint32_t kSavedDialogID = 0xAA8DEF97;	// the game's "City Saved." message box
 static constexpr uint32_t kSavedDialogTextID = 0x4A8CC4A9;	// and its text
@@ -1628,11 +1627,16 @@ void ChatPanel::Layout()
 		parentHeight = pParent->GetH();
 	}
 
-	// The open panel opens in the top right corner, where the chip is, unless the player has dragged it somewhere
+	// The open panel opens in the chip's corner (the top right in the city view, the bottom right in the region view),
+	// unless the player has dragged it somewhere
 	if (!moved)
 	{
 		openLeft = parentWidth - openWidth - kRightMargin;
-		openTop = GetTopMargin();
+		openTop = kTopMargin;
+		if (regionView)
+		{
+			openTop = parentHeight - openHeight - kChipBottomMargin;
+		}
 	}
 
 	if (minimized && pParent)
@@ -1853,21 +1857,17 @@ void ChatPanel::ShowChipTip()
 	SetTip(kChipBubbleID, tip);
 }
 
-int32_t ChatPanel::GetTopMargin() const
-{
-	if (regionView)
-	{
-		return kRegionTop;
-	}
-	return kCityTop;
-}
-
-// Where the chip goes in its view: home in the top right corner, just below a window of the game's that covers it
-// there, or in the bottom right corner if that one's too tall
+// Where the chip goes in its view: home in the top right corner (the bottom right in the region view, where its top
+// right has the game's buttons), just below a window of the game's that covers it there, or in the bottom right corner
+// if that one's too tall
 void ChatPanel::GetChipPlace(ChipSpot spot, int32_t& left, int32_t& top) const
 {
 	left = parentWidth - kChipWidth - kRightMargin;
-	top = GetTopMargin();
+	top = kTopMargin;
+	if (regionView)
+	{
+		top = parentHeight - kChipHeight - kChipBottomMargin;
+	}
 
 	if (spot == ChipSpot::Below)
 	{
