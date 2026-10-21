@@ -43,9 +43,6 @@ static constexpr int32_t kLineHeight = 18;
 static constexpr ULONGLONG kPromptWait = 2000;	// a dialog of the game's this soon after the city opens (eg. to reconcile the edges) is answered first
 static constexpr int32_t kTitleBandHeight = 34;	// the frame's title band, by which the warning is dragged
 
-static constexpr uint32_t kGZWinMessageCommand = 3;
-static constexpr uint32_t kGZWinCommandButtonClicked = 0x287259F6;
-
 // Splits text into lines that fit `width` pixels, breaking at spaces, and inside a word only if it's longer than a line
 static std::vector<std::wstring> WrapToWidth(const std::wstring& text, int32_t width)
 {
@@ -551,9 +548,7 @@ bool GuardDialog::DoWinProcMessage(cIGZWin* pSender, cGZMessage& msg)
 		StopDragging();
 		return true;
 	case kGZWinMessageMouseDownR:
-	case kGZWinMessageMouseDownM:
 	case kGZWinMessageMouseUpR:
-	case kGZWinMessageMouseUpM:
 	case kGZWinMessageMouseWheel:
 		return true;
 	case kGZWinMessageMouseMove:
