@@ -1498,7 +1498,9 @@ void ChatPanel::AddLine(const Notice& notice)
 		scrollRows = GetMaxScroll();
 	}
 
-	if (!notice.history && minimized)
+	// Only other players' chat counts as new. Lines without a name (saves, joins, new cities, the message of the day)
+	// and the player's own messages are shown, but not counted.
+	if (!notice.history && minimized && chat && !notice.own)
 	{
 		unread++;
 	}
