@@ -536,6 +536,16 @@ bool GuardDialog::DoWinProcMessage(cIGZWin* pSender, cGZMessage& msg)
 	int32_t x = static_cast<int32_t>(msg.dwData1);
 	int32_t y = static_cast<int32_t>(msg.dwData2);
 
+	if (msg.dwMessageType < 0x100 && msg.dwMessageType != 0x0D)
+	{
+		uint32_t sender = 0;
+		if (pSender)
+		{
+			sender = pSender->GetID();
+		}
+		Log::Line("DIAG warning msg " + std::to_string(msg.dwMessageType) + " sender " + std::to_string(sender) + " at " + std::to_string(x) + "," + std::to_string(y));
+	}
+
 	switch (msg.dwMessageType)
 	{
 	case kGZWinMessageCommand:
