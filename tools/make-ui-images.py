@@ -216,11 +216,10 @@ def draw_title_button(draw_icon):
 	return strip
 
 
-def minimize_arrow(draw, cx, cy, colour):
-	"""An arrow into the bottom right corner, where the minimized panel goes."""
+def minus_bar(draw, cx, cy, colour):
+	"""A minus, for minimizing the panel to its round button."""
 
-	draw.line([(cx - 4 * SCALE, cy - 4 * SCALE), (cx + 1.5 * SCALE, cy + 1.5 * SCALE)], fill=colour, width=round(1.6 * SCALE))
-	draw.polygon([(cx + 4 * SCALE, cy + 4 * SCALE), (cx - 1.5 * SCALE, cy + 4 * SCALE), (cx + 4 * SCALE, cy - 1.5 * SCALE)], fill=colour)
+	draw.rectangle([cx - 4.5 * SCALE, cy - 1 * SCALE, cx + 4.5 * SCALE, cy + 1 * SCALE], fill=colour)
 
 
 def draw_status(colour, symbol, size=14):
@@ -287,7 +286,7 @@ def make_images():
 	return {
 		"chat-field.png": draw_field(active=False),
 		"chat-field-typing.png": draw_field(active=True),
-		"chat-minimize.png": draw_title_button(minimize_arrow),
+		"chat-minimize.png": draw_title_button(minus_bar),
 		"chat-chip.png": draw_round_button(),
 		"chat-count.png": draw_count_bubble(),
 		"chat-hint.png": draw_hint(),

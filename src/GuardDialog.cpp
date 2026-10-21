@@ -41,6 +41,7 @@ static constexpr uint32_t kOwnerLineIDs[] = { 0x7B3E9AC4, 0x7B3E9AD0, 0x7B3E9AD1
 static constexpr uint32_t kBelowOwnerIDs[] = { 0x7B3E9AC5, 0x7B3E9AC6, kBackButtonID, kStayButtonID };
 static constexpr int32_t kLineWidth = 284;	// the owner lines' text windows (in GenBodyMedium), less their gutters
 static constexpr int32_t kLineHeight = 18;
+static constexpr ULONGLONG kPromptWait = 2000;	// a dialog of the game's this soon after the city opens (eg. to reconcile the edges) is answered first
 static constexpr int32_t kTitleBandHeight = 34;	// the frame's title band, by which the warning is dragged
 
 static constexpr uint32_t kGZWinMessageCommand = 3;
@@ -181,6 +182,7 @@ void GuardDialog::CityOpened(const std::string& path)
 {
 	warnedPath.clear();
 	cityOpenedTime = GetTickCount64();
+	openedTime = cityOpenedTime;
 
 	std::optional<Warning> claim;
 	{
@@ -206,6 +208,7 @@ void GuardDialog::CityOpened(const std::string& path)
 void GuardDialog::Detach()
 {
 	closeRequested = false;
+	waitingForGame = false;
 	StopDragging();
 
 	if (pWin)
@@ -311,6 +314,21 @@ bool GuardDialog::OnTick(uint32_t unknown1)
 		}
 	}
 
+	// The game's own prompt just after the city opens comes first, since it's modal and in front: the warning waits for
+	// it, hidden, and comes after it
+	if (pWin && !waitingForGame && openedTime && GetTickCount64() - openedTime < kPromptWait && IsGameModal())
+	{
+		waitingForGame = true;
+		pWin->HideWindow();
+	}
+	if (pWin && waitingForGame && !IsGameModal())
+	{
+		waitingForGame = false;
+		pWin->PullToFront();
+		pWin->ShowWindow();
+		Log::Line("Showing the claimed city warning after the game's prompt");
+	}
+
 	if (warning)
 	{
 		// The player may have left the city (or opened another) before the launcher answered
@@ -380,8 +398,17 @@ void GuardDialog::Show(const Warning& warning)
 	int32_t dy = (pParent->GetH() - pWin->GetH()) / 2 - pWin->GetT();
 	pWin->GZWinMoveTo(dx, dy);
 
-	pWin->PullToFront();
-	pWin->ShowWindow();
+	// It waits, hidden, while one of the game's dialogs is up (see OnTick)
+	if (IsGameModal())
+	{
+		waitingForGame = true;
+		pWin->HideWindow();
+	}
+	else
+	{
+		pWin->PullToFront();
+		pWin->ShowWindow();
+	}
 
 	// Keeps the clicks on the warning from the map under it, like the chat panel. It stays until Stop(), since removing
 	// it while the game is calling it (eg. from a click) isn't safe.
@@ -799,6 +826,13 @@ bool GuardDialog::IsSameSavegame(const std::string& a, const std::string& b)
 		return false;
 	}
 	return tail(a) == tail(b);
+}
+
+// Whether a dialog of the game's is up, which has the mouse and keys until it's answered
+bool GuardDialog::IsGameModal()
+{
+	cIGZWinMgrPtr pWinMgr;
+	return pWinMgr && pWinMgr->IsModal();
 }
 
 bool GuardDialog::IsOpenCity(const std::string& path)

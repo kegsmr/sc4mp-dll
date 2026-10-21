@@ -78,6 +78,7 @@ private:
 	bool SetMouseFilter(bool add);
 
 	static bool IsOpenCity(const std::string& path);
+	static bool IsGameModal();
 	static bool IsSameSavegame(const std::string& a, const std::string& b);
 
 	ParentFunction getParent;
@@ -100,4 +101,6 @@ private:
 
 	std::string warnedPath;	// the open city's savegame, if it was warned about, so the launcher's own check doesn't warn again
 	ULONGLONG cityOpenedTime = 0;	// when the city opened, until the game's first dialog after it is logged
+	ULONGLONG openedTime = 0;	// when the city opened
+	bool waitingForGame = false;	// the warning is hidden until the game's own dialog is answered
 };
