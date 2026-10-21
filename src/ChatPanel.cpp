@@ -1238,7 +1238,7 @@ bool ChatPanel::HandleKey(const cGZMessage& msg)
 			StopTyping();
 			break;
 		case VK_SPACE:
-			// The game sends no character for the space bar, so it's typed here
+			// The game sends no character for the space bar (it's its pause key), so it's typed here
 			Type(L' ');
 			spaceTyped = true;
 			break;
