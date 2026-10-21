@@ -4,6 +4,10 @@
 // The few UI interfaces that the pinned gzcom-dll doesn't have. Only the first methods are declared,
 // since a declared method must sit at the same vtable slot as in the game, and the rest are unused.
 // The interface IDs and method order were taken from sc4-region-census, which uses them in a released plugin.
+//
+// In the pinned cIGZWin.h, SetSize(cRZPoint) is an overload of SetSize(int, int), which MSVC puts next to it, so
+// slots 53 to 57 are each one off: its GZWinMoveTo(x, y) calls the game's slot 57, which moves a window by (x, y).
+// ChatPanel::MovePanel relies on that. Nothing else in slots 53 to 57 is called.
 
 class cIGZString;
 class cIGZWin;

@@ -79,6 +79,16 @@ void Bridge::SetNotifyHandler(NotifyHandler handler)
 	notifyHandler = std::move(handler);
 }
 
+void Bridge::SetStatusHandler(StatusHandler handler)
+{
+	statusHandler = std::move(handler);
+}
+
+void Bridge::SetServerHandler(ServerHandler handler)
+{
+	serverHandler = std::move(handler);
+}
+
 void Bridge::Send(JsonWriter message)
 {
 	if (!IsEnabled())
@@ -285,6 +295,25 @@ void Bridge::HandleLine(const std::string& line)
 		{
 			MessageBoxW(nullptr, wideText.c_str(), L"SC4MP", MB_OK | MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND);
 		}).detach();
+	}
+	else if (type == "status")
+	{
+		// The save status, shown in the chat panel's title bar
+		Log::Line("Launcher (status): " + message["state"] + " " + text);
+
+		if (statusHandler)
+		{
+			statusHandler(message["state"], text);
+		}
+	}
+	else if (type == "server")
+	{
+		Log::Line("Launcher (server): " + message["name"]);
+
+		if (serverHandler)
+		{
+			serverHandler(message["name"]);
+		}
 	}
 	else
 	{

@@ -27,16 +27,57 @@ static constexpr uint32_t kPanelInstance = 0x1A9F3B21;
 static constexpr uint32_t kPanelID = 0x7B3E9A60;
 static constexpr uint32_t kTitleID = 0x7B3E9A61;
 static constexpr uint32_t kHideButtonID = 0x7B3E9A62;
+static constexpr uint32_t kShowButtonID = 0x7B3E9A63;		// in the same place as Hide, shown instead of it while collapsed
+static constexpr uint32_t kBadgeID = 0x7B3E9A64;
+static constexpr uint32_t kBadgeTextID = 0x7B3E9A65;
+static constexpr uint32_t kBackgroundID = 0x7B3E9A66;
+static constexpr uint32_t kCollapsedBackgroundID = 0x7B3E9A67;
+static constexpr uint32_t kFieldID = 0x7B3E9A68;
+static constexpr uint32_t kTypingFieldID = 0x7B3E9A69;
 static constexpr uint32_t kFirstLineID = 0x7B3E9A70;
 static constexpr uint32_t kInputID = 0x7B3E9A80;
 static constexpr uint32_t kChatButtonID = 0x7B3E9A81;
+static constexpr uint32_t kMinimizeButtonID = 0x7B3E9A6A;
+static constexpr uint32_t kStatusPillID = 0x7B3E9A90;
+static constexpr uint32_t kStatusTextID = 0x7B3E9A91;
+
+// The minimized panel, a button in the corner with the status icon and unread count on it
+static constexpr uint32_t kChipID = 0x7B3E9AA0;
+static constexpr uint32_t kChipTextID = 0x7B3E9AA1;
+static constexpr uint32_t kChipIconOffset = 0x10;	// each status icon on the chip has the ID of the title bar's one plus this
+static constexpr int32_t kChipWidth = 64;
+static constexpr int32_t kChipHeight = 26;
+static constexpr int32_t kChipRightMargin = 12;
+static constexpr int32_t kChipBottomMargin = 48;	// above the city view's news ticker
+
+// Windows in the title bar, shown unless the panel is minimized
+static constexpr uint32_t kTitleBarIDs[] = { kTitleID, kStatusPillID, kStatusTextID, kMinimizeButtonID };
+
+// Where the panel's open, collapsed or minimized state is kept between games
+static constexpr wchar_t kSettingsKey[] = L"Software\\SC4MP\\DLL";
+static constexpr wchar_t kPanelModeValue[] = L"ChatPanelMode";
+
+// The save status icons, one window each, of which only the current one is shown
+static constexpr std::pair<const char*, uint32_t> kStatusIcons[] = {
+	{ "saved", 0x7B3E9A92 },
+	{ "saving", 0x7B3E9A93 },
+	{ "failed", 0x7B3E9A94 },
+	{ "not_saved", 0x7B3E9A95 },
+	{ "connected", 0x7B3E9A96 },
+	{ "disconnected", 0x7B3E9A97 },
+	{ "guest", 0x7B3E9A98 },
+	{ "refreshing", 0x7B3E9A93 },
+	{ "refreshed", 0x7B3E9A92 },
+};
 
 static constexpr size_t kLineCount = 8;
-static constexpr size_t kLineLength = 60;			// characters that fit on a line, roughly, since the font isn't monospaced
-static constexpr size_t kShownInputLength = 50;		// the end of a longer message is shown while typing it
+static constexpr size_t kLineLength = 48;			// characters that fit on a line, roughly, since the font isn't monospaced
+static constexpr size_t kShownInputLength = 40;		// the end of a longer message is shown while typing it
 static constexpr size_t kMaxInputLength = 200;
 static constexpr size_t kMaxInbox = 100;
-static constexpr int32_t kCollapsedHeight = 34;		// just the title bar
+static constexpr size_t kTitleLength = 19;			// before the title runs into the unread badge
+static constexpr size_t kStatusLength = 20;			// before the status runs out of its pill
+static constexpr int32_t kCollapsedHeight = 42;		// just the title bar (and its shadow), as in chat-panel-collapsed.png
 
 static constexpr uint32_t kGZWinMessageCommand = 3;
 static constexpr uint32_t kGZWinCommandButtonClicked = 0x287259F6;
@@ -44,6 +85,18 @@ static constexpr LPARAM kKeyRepeatFlag = 1 << 30;
 
 static const char* const kTitle = "SC4MP Chat";
 static const char* const kInputHint = "Press Enter to chat";
+
+// Shortens text to `length` characters, ending it with "..." if it was cut
+static std::string Shorten(const std::string& text, size_t length)
+{
+	std::wstring wide = Text::Utf8ToWide(text);
+	if (wide.size() <= length)
+	{
+		return text;
+	}
+
+	return Text::WideToUtf8(wide.substr(0, length - 3)) + "...";
+}
 
 // Splits a line into pieces that fit the panel, breaking at spaces where possible
 static std::vector<std::wstring> Wrap(const std::wstring& text)
@@ -98,6 +151,7 @@ void ChatPanel::Start(SendFunction chat, SendFunction command)
 
 	sendChat = std::move(chat);
 	sendCommand = std::move(command);
+	LoadMode();
 
 	cIGZFrameWork* pFramework = RZGetFrameWork();
 	if (!pFramework)
@@ -176,12 +230,14 @@ void ChatPanel::Attach(cIGZWin* pNewParent)
 		Log::Line("The chat panel isn't a GZWinGen, so its buttons won't work");
 	}
 
-	expandedHeight = pWin->GetH();
+	// Where the UI script puts the open panel
+	openLeft = pWin->GetL();
+	openTop = pWin->GetT();
+	openWidth = pWin->GetW();
+	openHeight = pWin->GetH();
 
-	SetCollapsed(collapsed);
+	Layout();
 	ShowLines();
-	ShowInput();
-	ShowTitle();
 
 	pWin->PullToFront();
 	pWin->ShowWindow();
@@ -230,7 +286,11 @@ void ChatPanel::StartTyping()
 		return;
 	}
 
-	if (collapsed)
+	if (minimized)
+	{
+		SetMinimized(false);
+	}
+	else if (collapsed)
 	{
 		SetCollapsed(false);
 	}
@@ -248,6 +308,20 @@ void ChatPanel::Post(const std::string& text, bool history)
 	{
 		inbox.pop_front();
 	}
+}
+
+void ChatPanel::PostStatus(const std::string& state, const std::string& text)
+{
+	std::lock_guard<std::mutex> lock(inboxMutex);
+
+	// Only the latest status matters
+	pendingStatus = std::make_pair(state, text);
+}
+
+void ChatPanel::PostServerName(const std::string& name)
+{
+	std::lock_guard<std::mutex> lock(inboxMutex);
+	pendingServerName = name;
 }
 
 bool ChatPanel::QueryInterface(uint32_t riid, void** ppvObj)
@@ -285,22 +359,43 @@ bool ChatPanel::Shutdown()
 bool ChatPanel::OnTick(uint32_t unknown1)
 {
 	std::deque<std::pair<std::string, bool>> received;
+	std::optional<std::pair<std::string, std::string>> newStatus;
+	std::optional<std::string> newServerName;
 	{
 		std::lock_guard<std::mutex> lock(inboxMutex);
-		if (inbox.empty())
-		{
-			return true;
-		}
 		received.swap(inbox);
+		newStatus.swap(pendingStatus);
+		newServerName.swap(pendingServerName);
 	}
 
-	for (const auto& [text, history] : received)
+	if (newServerName)
 	{
-		AddLine(text, history);
+		serverName = *newServerName;
+		ShowTitle();
 	}
 
-	ShowLines();
-	ShowTitle();
+	if (newStatus)
+	{
+		status = *newStatus;
+		ShowStatus();
+	}
+
+	// The corner moves when the game's resolution changes
+	if (pWin && pParent && minimized && (pParent->GetW() != parentWidth || pParent->GetH() != parentHeight))
+	{
+		Layout();
+	}
+
+	if (!received.empty())
+	{
+		for (const auto& [text, history] : received)
+		{
+			AddLine(text, history);
+		}
+
+		ShowLines();
+		ShowTitle();
+	}
 
 	return true;
 }
@@ -315,11 +410,22 @@ bool ChatPanel::DoWinProcMessage(cIGZWin* pSender, cGZMessage& msg)
 	switch (msg.dwData2)	// the button's ID
 	{
 	case kHideButtonID:
+	case kShowButtonID:
 		if (typing)
 		{
 			StopTyping();
 		}
 		SetCollapsed(!collapsed);
+		return true;
+	case kMinimizeButtonID:
+		if (typing)
+		{
+			StopTyping();
+		}
+		SetMinimized(true);
+		return true;
+	case kChipID:
+		SetMinimized(false);
 		return true;
 	case kChatButtonID:
 		if (typing)
@@ -580,7 +686,7 @@ void ChatPanel::AddLine(const std::string& text, bool history)
 		lines.pop_front();
 	}
 
-	if (!history && collapsed)
+	if (!history && (collapsed || minimized))
 	{
 		unread++;
 	}
@@ -594,30 +700,134 @@ void ChatPanel::SetCollapsed(bool value)
 		unread = 0;
 	}
 
+	SaveMode();
+	Layout();
+}
+
+void ChatPanel::SetMinimized(bool value)
+{
+	minimized = value;
+	if (!minimized)
+	{
+		collapsed = false;	// the chip opens the whole panel
+		unread = 0;
+	}
+
+	SaveMode();
+	Layout();
+}
+
+// Shows the windows for the panel's state, and sizes and places it
+void ChatPanel::Layout()
+{
 	if (!pWin)
 	{
 		return;
 	}
 
+	bool open = !collapsed && !minimized;
+
+	// Everything below the title bar is hidden, and the background is swapped for one that's only the title bar,
+	// so nothing is left under it even if the game doesn't shrink the panel
 	for (uint32_t i = 0; i < kLineCount; i++)
 	{
-		SetChildVisible(kFirstLineID + i, !collapsed);
+		SetChildVisible(kFirstLineID + i, open);
 	}
-	SetChildVisible(kInputID, !collapsed);
-	SetChildVisible(kChatButtonID, !collapsed);
-
-	if (collapsed)
+	SetChildVisible(kBackgroundID, open);
+	SetChildVisible(kInputID, open);
+	SetChildVisible(kChatButtonID, open);
+	SetChildVisible(kHideButtonID, open);
+	SetChildVisible(kCollapsedBackgroundID, collapsed && !minimized);
+	SetChildVisible(kShowButtonID, collapsed && !minimized);
+	for (uint32_t id : kTitleBarIDs)
 	{
-		pWin->SetH(kCollapsedHeight);
-		SetCaption(kHideButtonID, "Show");
+		SetChildVisible(id, !minimized);
+	}
+	SetChildVisible(kChipID, minimized);
+	SetChildVisible(kChipTextID, minimized);
+
+	// Shrunk too, so the empty part doesn't take clicks meant for the view under it
+	int32_t width = openWidth;
+	int32_t height = openHeight;
+	if (minimized)
+	{
+		width = kChipWidth;
+		height = kChipHeight;
+	}
+	else if (collapsed)
+	{
+		height = kCollapsedHeight;
+	}
+
+	pWin->SetW(width);
+	pWin->SetH(height);
+
+	if (minimized && pParent)
+	{
+		parentWidth = pParent->GetW();
+		parentHeight = pParent->GetH();
+		MovePanel(parentWidth - kChipWidth - kChipRightMargin, parentHeight - kChipHeight - kChipBottomMargin);
 	}
 	else
 	{
-		pWin->SetH(expandedHeight);
-		SetCaption(kHideButtonID, "Hide");
+		MovePanel(openLeft, openTop);
 	}
 
+	ShowInput();
 	ShowTitle();
+	ShowStatus();
+
+	// The view under the panel has to be redrawn where the panel was
+	pWin->InvalidateSelf();
+	if (pParent)
+	{
+		pParent->InvalidateSelf();
+	}
+}
+
+// The pinned gzcom-dll declares GZWinMoveTo one vtable slot late (see GZWinInterfaces.h), so calling it runs the
+// game's next method, which moves the window by an offset. So it's given the distance to the new place.
+void ChatPanel::MovePanel(int32_t left, int32_t top)
+{
+	int32_t dx = left - pWin->GetL();
+	int32_t dy = top - pWin->GetT();
+	if (dx == 0 && dy == 0)
+	{
+		return;
+	}
+
+	pWin->GZWinMoveTo(dx, dy);
+
+	if (pWin->GetL() != left || pWin->GetT() != top)
+	{
+		Log::Line("The chat panel didn't move to (" + std::to_string(left) + ", " + std::to_string(top) + "), it's at (" + std::to_string(pWin->GetL()) + ", " + std::to_string(pWin->GetT()) + ")");
+	}
+}
+
+void ChatPanel::LoadMode()
+{
+	DWORD mode = 0;
+	DWORD size = sizeof(mode);
+	if (RegGetValueW(HKEY_CURRENT_USER, kSettingsKey, kPanelModeValue, RRF_RT_REG_DWORD, nullptr, &mode, &size) == ERROR_SUCCESS)
+	{
+		collapsed = mode == 1;
+		minimized = mode == 2;
+	}
+}
+
+void ChatPanel::SaveMode() const
+{
+	DWORD mode = 0;
+	if (minimized)
+	{
+		mode = 2;
+	}
+	else if (collapsed)
+	{
+		mode = 1;
+	}
+
+	RegSetKeyValueW(HKEY_CURRENT_USER, kSettingsKey, kPanelModeValue, REG_DWORD, &mode, sizeof(mode));
 }
 
 // Shows the newest lines at the bottom
@@ -642,10 +852,13 @@ void ChatPanel::ShowLines()
 
 void ChatPanel::ShowInput()
 {
+	bool open = !collapsed && !minimized;
+	SetChildVisible(kFieldID, open && !typing);
+	SetChildVisible(kTypingFieldID, open && typing);
+
 	if (!typing)
 	{
 		SetText(kInputID, kInputHint);
-		SetCaption(kChatButtonID, "Chat");
 		return;
 	}
 
@@ -656,18 +869,69 @@ void ChatPanel::ShowInput()
 	}
 
 	SetText(kInputID, "> " + Text::WideToUtf8(shown) + "_");
-	SetCaption(kChatButtonID, "Send");
 }
 
 void ChatPanel::ShowTitle()
 {
-	std::string title = kTitle;
-	if (collapsed && unread > 0)
+	if (serverName.empty())
 	{
-		title += " (" + std::to_string(unread) + " new)";
+		SetText(kTitleID, kTitle);
+	}
+	else
+	{
+		SetText(kTitleID, Shorten(serverName, kTitleLength));
 	}
 
-	SetText(kTitleID, title);
+	std::string count = std::to_string(unread);
+	if (unread > 99)
+	{
+		count = "99+";
+	}
+
+	bool badge = collapsed && !minimized && unread > 0;
+	SetChildVisible(kBadgeID, badge);
+	SetChildVisible(kBadgeTextID, badge);
+	SetText(kBadgeTextID, count);
+
+	if (unread > 0)
+	{
+		SetText(kChipTextID, count + " new");
+	}
+	else
+	{
+		SetText(kChipTextID, "Chat");
+	}
+}
+
+// Shows the launcher's save status, which stays in the title bar while the panel is collapsed
+void ChatPanel::ShowStatus()
+{
+	const auto& [state, text] = status;
+
+	// The icon is shown on the title bar, or on the chip when minimized. An unknown state from a newer launcher has none.
+	uint32_t shown = 0;
+	for (const auto& [iconState, id] : kStatusIcons)
+	{
+		if (state == iconState)
+		{
+			if (minimized)
+			{
+				shown = id + kChipIconOffset;
+			}
+			else
+			{
+				shown = id;
+			}
+			break;
+		}
+	}
+	for (const auto& [iconState, id] : kStatusIcons)
+	{
+		SetChildVisible(id, id == shown);
+		SetChildVisible(id + kChipIconOffset, id + kChipIconOffset == shown);
+	}
+
+	SetText(kStatusTextID, Shorten(text, kStatusLength));
 }
 
 void ChatPanel::SetText(uint32_t id, const std::string& text)
@@ -681,22 +945,6 @@ void ChatPanel::SetText(uint32_t id, const std::string& text)
 	if (pWin->GetChildAs(id, kGZIID_cIGZWinText, pText.AsPPVoid()))
 	{
 		pText->SetCaption(cRZBaseString(text));
-	}
-}
-
-// For buttons, which have no cIGZWinText
-void ChatPanel::SetCaption(uint32_t id, const std::string& text)
-{
-	if (!pWin)
-	{
-		return;
-	}
-
-	cIGZWin* pChild = pWin->GetChildWindowFromID(id);
-	if (pChild)
-	{
-		pChild->SetCaption(cRZBaseString(text));
-		pChild->InvalidateSelf();
 	}
 }
 

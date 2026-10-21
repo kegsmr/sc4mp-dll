@@ -111,6 +111,8 @@ public:
 
 		// The bridge thread only queues the lines; the panel shows them on the game thread
 		bridge.SetNotifyHandler([this](const std::string& text, bool history) { chat.Post(text, history); });
+		bridge.SetStatusHandler([this](const std::string& state, const std::string& text) { chat.PostStatus(state, text); });
+		bridge.SetServerHandler([this](const std::string& name) { chat.PostServerName(name); });
 
 		// In single player, only log what happens
 		if (!bridge.Start())

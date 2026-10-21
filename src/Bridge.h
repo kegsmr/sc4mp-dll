@@ -32,6 +32,12 @@ public:
 	using NotifyHandler = std::function<void(const std::string& text, bool history)>;
 	void SetNotifyHandler(NotifyHandler handler);
 
+	// Called on the bridge thread with the launcher's save status (eg. "saved", "Saved 13:01") and the server's name. Set them before Start().
+	using StatusHandler = std::function<void(const std::string& state, const std::string& text)>;
+	using ServerHandler = std::function<void(const std::string& name)>;
+	void SetStatusHandler(StatusHandler handler);
+	void SetServerHandler(ServerHandler handler);
+
 	// Queues a message for the launcher, adding the current time. Messages wait in the queue
 	// while the launcher isn't connected.
 	void Send(JsonWriter message);
@@ -49,6 +55,8 @@ private:
 	std::thread thread;
 	std::atomic<bool> stopping = false;
 	NotifyHandler notifyHandler;
+	StatusHandler statusHandler;
+	ServerHandler serverHandler;
 
 	std::mutex mutex;
 	std::condition_variable stopped;
