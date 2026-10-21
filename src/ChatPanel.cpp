@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <cwchar>
 #include <iterator>
 #include <vector>
@@ -526,11 +527,78 @@ bool ChatPanel::OnTick(uint32_t unknown1)
 	return true;
 }
 
+// EXPERIMENT: SC4MP_INPUT_EXPERIMENT is unset (as before), "log" (log the panel's messages), "pass" (no Win32 mouse
+// filter, messages logged and left unhandled) or "keep" (no Win32 mouse filter, messages logged and kept)
+static int InputExperiment()
+{
+	static int mode = -1;
+	if (mode < 0)
+	{
+		char value[16] = {};
+		GetEnvironmentVariableA("SC4MP_INPUT_EXPERIMENT", value, sizeof(value));
+		mode = 0;
+		if (strcmp(value, "log") == 0)
+		{
+			mode = 1;
+		}
+		else if (strcmp(value, "pass") == 0)
+		{
+			mode = 2;
+		}
+		else if (strcmp(value, "keep") == 0)
+		{
+			mode = 3;
+		}
+		Log::Line(std::string("Input experiment mode: ") + value);
+	}
+	return mode;
+}
+
+static void LogWinProcMessage(cIGZWin* pSender, cGZMessage& msg)
+{
+	static uint32_t lastType = 0xFFFFFFFF;
+	static uint32_t lastData1 = 0;
+	static uint32_t lastSender = 0;
+	static int repeats = 0;
+
+	uint32_t sender = 0;
+	if (pSender)
+	{
+		sender = pSender->GetID();
+	}
+
+	if (msg.dwMessageType == lastType && msg.dwData1 == lastData1 && sender == lastSender)
+	{
+		repeats++;
+		if (repeats != 10 && repeats != 100)
+		{
+			return;
+		}
+	}
+	else
+	{
+		repeats = 0;
+	}
+	lastType = msg.dwMessageType;
+	lastData1 = msg.dwData1;
+	lastSender = sender;
+
+	char line[160];
+	snprintf(line, sizeof(line), "WinProc sender=%08X type=%08X d1=%08X d2=%08X d3=%08X repeats=%d", sender, msg.dwMessageType, msg.dwData1, msg.dwData2, msg.dwData3, repeats);
+	Log::Line(line);
+}
+
 bool ChatPanel::DoWinProcMessage(cIGZWin* pSender, cGZMessage& msg)
 {
+	int mode = InputExperiment();
+	if (mode > 0)
+	{
+		LogWinProcMessage(pSender, msg);
+	}
+
 	if (msg.dwMessageType != kGZWinMessageCommand || msg.dwData1 != kGZWinCommandButtonClicked)
 	{
-		return false;
+		return mode == 3;
 	}
 
 	return Click(msg.dwData2);	// the button's ID
@@ -589,7 +657,7 @@ LRESULT ChatPanel::FilterMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 		return 0;	// no panel in this view, or it's hidden with the game's UI
 	}
 
-	if (uMsg >= WM_MOUSEFIRST && uMsg <= WM_MOUSELAST)
+	if (uMsg >= WM_MOUSEFIRST && uMsg <= WM_MOUSELAST && InputExperiment() < 2)
 	{
 		handled = HandleMouse(hWnd, uMsg, wParam, lParam);
 	}
