@@ -29,6 +29,7 @@ IMAGE_FILES = {
 	"chat-minimize.png": 0x391B92E8,
 	"chat-chip.png": 0x3B71C9C9,
 	"chat-count.png": 0x4D2E7A26,
+	"chat-globe.png": 0x4D2E7A28,
 	"chat-hint.png": 0x4D2E7A27,
 	"ring-green.png": 0x4D2E7A21,
 	"ring-blue.png": 0x4D2E7A22,
