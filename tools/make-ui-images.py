@@ -50,6 +50,8 @@ SHADOW = 6	# room right of and below the panel for its shadow
 HISTORY = (8, 38, 352, 190)
 FIELD_SIZE = (308, 26)
 PILL_SIZE = (120, 20)
+GUARD_HEIGHT = 156	# the claimed city warning is as wide as the panel
+GUARD_BUTTON_SIZE = (156, 28)
 
 STATES = ("disabled", "normal", "pressed", "hover")
 
@@ -267,6 +269,8 @@ def make_images():
 		"status-connected.png": draw_status(GREEN, "dot"),
 		"status-disconnected.png": draw_status(GREY, "dash"),
 		"status-guest.png": draw_status(INDIGO, "person"),
+		"guard-panel.png": draw_panel(GUARD_HEIGHT, history=False),	# the claimed city warning (ui/GuardDialog.ui)
+		"guard-button.png": draw_button(*GUARD_BUTTON_SIZE, no_icon),	# its labels are text windows on top
 		"tile-you.png": draw_tile(TILE_YOU, "you"),
 		"tile-claimed.png": draw_tile(TILE_CLAIMED, "claimed"),
 		"tile-unclaimed.png": draw_tile(TILE_UNCLAIMED, "unclaimed"),

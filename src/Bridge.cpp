@@ -89,6 +89,11 @@ void Bridge::SetServerHandler(ServerHandler handler)
 	serverHandler = std::move(handler);
 }
 
+void Bridge::SetGuardHandler(GuardHandler handler)
+{
+	guardHandler = std::move(handler);
+}
+
 void Bridge::Send(JsonWriter message)
 {
 	if (!IsEnabled())
@@ -313,6 +318,16 @@ void Bridge::HandleLine(const std::string& line)
 		if (serverHandler)
 		{
 			serverHandler(message["name"]);
+		}
+	}
+	else if (type == "guard")
+	{
+		// The open city belongs to another mayor, so the player's saves won't be kept
+		Log::Line("Launcher (guard): " + message["city"] + " belongs to " + message["owner"]);
+
+		if (guardHandler)
+		{
+			guardHandler(message["owner"], message["city"], message["path"]);
 		}
 	}
 	else
