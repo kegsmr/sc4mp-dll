@@ -89,6 +89,11 @@ void Bridge::SetServerHandler(ServerHandler handler)
 	serverHandler = std::move(handler);
 }
 
+void Bridge::SetProgressHandler(ProgressHandler handler)
+{
+	progressHandler = std::move(handler);
+}
+
 void Bridge::SetGuardHandler(GuardHandler handler)
 {
 	guardHandler = std::move(handler);
@@ -313,7 +318,7 @@ void Bridge::HandleLine(const std::string& line)
 		// Also kept in the chat panel, since the message box goes away
 		if (notifyHandler)
 		{
-			notifyHandler(text, false, std::string(), std::string(), false);
+			notifyHandler(text, false, std::string(), message["color"], false);	// a failed save's color
 		}
 
 		// Shown in a dialog like the game's, with the launcher's title and body (which can have several lines). Older
@@ -348,6 +353,14 @@ void Bridge::HandleLine(const std::string& line)
 		if (statusHandler)
 		{
 			statusHandler(message["state"], text);
+		}
+	}
+	else if (type == "progress")
+	{
+		// How far a save push is, shown as the chat panel's last line until it's cleared. Not logged, since it comes often.
+		if (progressHandler)
+		{
+			progressHandler(text);
 		}
 	}
 	else if (type == "server")

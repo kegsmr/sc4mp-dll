@@ -91,6 +91,16 @@ static constexpr uint8_t kNameColors[][3] = {
 };
 static constexpr int kNameColorCount = static_cast<int>(std::size(kNameColors));
 
+// The colors of save results, the status icons' green and red (in tools/make-ui-images.py), in windows after each row's name windows, at
+// kFirstNameID + row * kNameLineStep + kResultColorOffset + color. The launcher sends a result's color, and the nearest of these is used.
+static constexpr uint8_t kResultColors[][3] = {
+	{ 46, 160, 67 },	// saved
+	{ 206, 52, 52 },	// failed
+};
+static constexpr int kResultColorCount = static_cast<int>(std::size(kResultColors));
+static constexpr uint32_t kResultColorOffset = 0xC;
+static_assert(static_cast<uint32_t>(kNameColorCount) <= kResultColorOffset && kResultColorOffset + static_cast<uint32_t>(kResultColorCount) <= kNameLineStep, "a row's color windows overlap");
+
 // The panel's windows that are clicked like buttons but aren't the game's, so their presses come to the panel. Only the
 // shown ones can be clicked.
 static constexpr uint32_t kButtonIDs[] = { kFieldID, kNewHintTextID };	// the field is clicked to type
@@ -209,8 +219,8 @@ static std::vector<std::wstring> Wrap(const std::wstring& text, int32_t firstWid
 }
 
 
-// Returns the name color (in kNameColors) nearest to the launcher's, which comes as "[red,green,blue]", or -1 if there's none
-static int FindNameColor(const std::string& color)
+// Returns the color in `colors` (eg. kNameColors) nearest to the launcher's, which comes as "[red,green,blue]", or -1 if there's none
+static int FindNearestColor(const std::string& color, const uint8_t colors[][3], int colorCount)
 {
 	// Read by hand rather than with a string stream, which would make the DLL a lot bigger
 	int rgb[3]{};
@@ -244,12 +254,12 @@ static int FindNameColor(const std::string& color)
 
 	int nearest = -1;
 	int nearestDistance = 0;
-	for (int i = 0; i < kNameColorCount; i++)
+	for (int i = 0; i < colorCount; i++)
 	{
 		int distance = 0;
 		for (int channel = 0; channel < 3; channel++)
 		{
-			int difference = rgb[channel] - kNameColors[i][channel];
+			int difference = rgb[channel] - colors[i][channel];
 			distance += difference * difference;
 		}
 
@@ -476,6 +486,14 @@ void ChatPanel::PostServerName(const std::string& name)
 	pendingServerName = name;
 }
 
+void ChatPanel::PostProgress(const std::string& text)
+{
+	std::lock_guard<std::mutex> lock(inboxMutex);
+
+	// Only the latest progress matters
+	pendingProgress = text;
+}
+
 bool ChatPanel::QueryInterface(uint32_t riid, void** ppvObj)
 {
 	if (riid == GZIID_cIGZWinProc)
@@ -520,11 +538,13 @@ bool ChatPanel::OnTick(uint32_t unknown1)
 	std::deque<Notice> received;
 	std::optional<std::pair<std::string, std::string>> newStatus;
 	std::optional<std::string> newServerName;
+	std::optional<std::string> newProgress;
 	{
 		std::lock_guard<std::mutex> lock(inboxMutex);
 		received.swap(inbox);
 		newStatus.swap(pendingStatus);
 		newServerName.swap(pendingServerName);
+		newProgress.swap(pendingProgress);
 	}
 
 	if (newServerName)
@@ -537,6 +557,25 @@ bool ChatPanel::OnTick(uint32_t unknown1)
 	{
 		status = *newStatus;
 		ShowStatus();
+	}
+
+	if (newProgress && *newProgress != progress)
+	{
+		// While the player has scrolled up, the lines they're reading stay put when the progress row comes or goes
+		if (scrollRows > 0 && progress.empty())
+		{
+			scrollRows++;
+		}
+		else if (scrollRows > 0 && newProgress->empty())
+		{
+			scrollRows--;
+			if (scrollRows == 0)
+			{
+				newBelow = 0;
+			}
+		}
+		progress = *newProgress;
+		ShowLines();
 	}
 
 	// The corner moves when the game's resolution changes, and the open panel is kept inside the view
@@ -960,13 +999,23 @@ void ChatPanel::Resize(int32_t x, int32_t y)
 	Layout();
 }
 
+// The lines, and the save's progress after them while there's one
+size_t ChatPanel::GetRowCount() const
+{
+	if (progress.empty())
+	{
+		return lines.size();
+	}
+	return lines.size() + 1;
+}
+
 size_t ChatPanel::GetMaxScroll() const
 {
-	if (lines.size() <= lineCount)
+	if (GetRowCount() <= lineCount)
 	{
 		return 0;
 	}
-	return lines.size() - lineCount;
+	return GetRowCount() - lineCount;
 }
 
 // Scrolls the chat by `rows`, back to older lines if positive
@@ -1693,9 +1742,14 @@ void ChatPanel::WrapNotice(const Notice& notice)
 	const std::string& text = notice.text;
 	bool chat = !notice.name.empty();
 	int color = -1;
+	int resultColor = -1;
 	if (chat)
 	{
-		color = FindNameColor(notice.color);
+		color = FindNearestColor(notice.color, kNameColors, kNameColorCount);
+	}
+	else if (!notice.color.empty())
+	{
+		resultColor = FindNearestColor(notice.color, kResultColors, kResultColorCount);
 	}
 
 	std::string namePrefix = notice.name + ":";
@@ -1741,6 +1795,7 @@ void ChatPanel::WrapNotice(const Notice& notice)
 				Line shown;
 				shown.text = Text::WideToUtf8(piece);
 				shown.chat = chat;
+				shown.resultColor = resultColor;
 				if (!name.empty())
 				{
 					shown.name = name;
@@ -1921,6 +1976,10 @@ void ChatPanel::FitChildren()
 		{
 			FitChild(kFirstNameID + row * kNameLineStep + color, 0, 0, dw, 0);
 		}
+		for (uint32_t color = 0; color < static_cast<uint32_t>(kResultColorCount); color++)
+		{
+			FitChild(kFirstNameID + row * kNameLineStep + kResultColorOffset + color, 0, 0, dw, 0);
+		}
 	}
 
 	layoutWidth = openWidth;
@@ -1977,8 +2036,12 @@ void ChatPanel::ShowLines()
 
 	bool open = !minimized;
 
-	// The rows shown end `scrollRows` above the newest line. The UI script's rows past the ones that fit are cleared.
-	size_t end = lines.size() - scrollRows;
+	// The save's progress is a row after the lines, which isn't kept with them
+	Line progressLine;
+	progressLine.text = Text::ShortenToWidth(progress, GetLineWidth(), 8);
+
+	// The rows shown end `scrollRows` above the newest one. The UI script's rows past the ones that fit are cleared.
+	size_t end = GetRowCount() - scrollRows;
 	size_t shown = end;
 	if (shown > lineCount)
 	{
@@ -1991,7 +2054,15 @@ void ChatPanel::ShowLines()
 		const Line* line = nullptr;
 		if (i >= blank && i < lineCount)
 		{
-			line = &lines[end - shown + i - blank];
+			size_t index = end - shown + i - blank;
+			if (index < lines.size())
+			{
+				line = &lines[index];
+			}
+			else
+			{
+				line = &progressLine;
+			}
 		}
 
 		ShowLine(static_cast<uint32_t>(i), line, open);
@@ -2001,7 +2072,7 @@ void ChatPanel::ShowLines()
 }
 
 // Shows a line in a row of the panel, or clears the row if `line` is null. Chat is in navy, after the player's name in its color,
-// and other lines are in grey. Each is a window of its own, since a text window has one color.
+// save results in their color, and other lines are in grey. Each is a window of its own, since a text window has one color.
 void ChatPanel::ShowLine(uint32_t row, const Line* line, bool open)
 {
 	if (!pWin)
@@ -2010,7 +2081,7 @@ void ChatPanel::ShowLine(uint32_t row, const Line* line, bool open)
 	}
 
 	bool chat = line && line->chat;
-	bool info = line && !line->chat;
+	bool info = line && !line->chat && line->resultColor < 0;
 	bool named = chat && !line->name.empty();
 
 	// The message goes after the name, so its window is moved right of it. The name windows stay where the UI script puts them.
@@ -2047,6 +2118,17 @@ void ChatPanel::ShowLine(uint32_t row, const Line* line, bool open)
 		SetText(kFirstInfoLineID + row, std::string());
 	}
 	SetChildVisible(kFirstInfoLineID + row, open && info);
+
+	for (int color = 0; color < kResultColorCount; color++)
+	{
+		uint32_t id = kFirstNameID + row * kNameLineStep + kResultColorOffset + static_cast<uint32_t>(color);
+		bool shown = line && !line->chat && line->resultColor == color;
+		if (shown)
+		{
+			SetText(id, line->text);
+		}
+		SetChildVisible(id, open && shown);
+	}
 
 	for (int color = 0; color < kNameColorCount; color++)
 	{
