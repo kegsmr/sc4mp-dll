@@ -654,6 +654,10 @@ LRESULT ChatPanel::FilterMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 // pressed button to keep track of.
 void ChatPanel::Press(int32_t x, int32_t y)
 {
+	// Like a window, the panel comes over the game's panels when it's clicked, eg. the city view's bottom panels, which
+	// the game adds after it
+	pWin->PullToFront();
+
 	if (minimized)
 	{
 		// The minimized panel is just the round button, so a press anywhere on it opens the panel
@@ -675,7 +679,8 @@ void ChatPanel::Press(int32_t x, int32_t y)
 // Scrolls the chat, so the wheel doesn't zoom the map under the panel
 void ChatPanel::Wheel(const cGZMessage& msg)
 {
-	int32_t delta = static_cast<int32_t>(msg.dwData3);
+	// Only the low word is the turn (like WM_MOUSEWHEEL's), so a turn down isn't read as a big turn up
+	int32_t delta = static_cast<int16_t>(msg.dwData3 & 0xFFFF);
 
 	// Once a game, since what the message holds was only seen once
 	if (!loggedWheel)
