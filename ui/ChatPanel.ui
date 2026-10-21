@@ -4,7 +4,7 @@
 # Its top window isn't moveable by the game (moveable=no), since the DLL drags it by its title band: the game's own moving, by the
 # window's edge, fought with it and made it jump.
 # The chat lines scroll with the game's own scrollbar (GZWinScrollbar with {46a006b0,46a006a6}, as in its bridge picker), which the DLL sets and
-# hit-tests itself, since the panel keeps its clicks from the map. A hint (0x7B3E9A6C, 0x7B3E9A6D) counts new messages below while scrolled up.
+# follows when the player moves it. A hint (0x7B3E9A6C, 0x7B3E9A6D) counts new messages below while scrolled up.
 # The title has most of the title band, so long server names fit. The save status is an icon before the buttons, with its text as the tooltip of a
 # see-through button over it (0x7B3E9A90), set by the DLL. The panel is either open or minimized to the chip: a round button
 # like the game's (eg. {46a006b0,cbcb6e9b}, drawn at 50 pixels), with the status as its ring's colour, a globe cut out of the game's {46a006b0,14416310}

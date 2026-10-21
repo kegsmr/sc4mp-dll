@@ -29,7 +29,6 @@ static constexpr uint32_t kDialogGroup = 0xC0E6A1C5;
 static constexpr uint32_t kDialogInstance = 0x5D2C7E43;
 static constexpr uint32_t kAlertInstance = 0x5D2C7E44;	// ui/AlertDialog.ui: the same dialog with one OK button, for the launcher's alerts
 static constexpr uint32_t kTitleID = 0x7B3E9AC3;
-static constexpr size_t kMaxAlerts = 3;	// a few failures in a row are shown one after another, not piled up
 static constexpr uint32_t kDialogID = 0x7B3E9AC1;
 static constexpr uint32_t kSignID = 0x7B3E9ACA;
 static constexpr uint32_t kBackButtonID = 0x7B3E9AC7;
@@ -42,6 +41,7 @@ static constexpr int32_t kLineWidth = 284;	// the owner lines' text windows (in 
 static constexpr int32_t kLineHeight = 18;
 static constexpr ULONGLONG kPromptWait = 2000;	// a dialog of the game's this soon after the city opens (eg. to reconcile the edges) is answered first
 static constexpr int32_t kTitleBandHeight = 34;	// the frame's title band, by which the warning is dragged
+static constexpr size_t kMaxAlerts = 3;	// a few failures in a row are shown one after another, not piled up
 
 // Splits text into lines that fit `width` pixels, breaking at spaces, and inside a word only if it's longer than a line
 static std::vector<std::wstring> WrapToWidth(const std::wstring& text, int32_t width)
@@ -742,7 +742,6 @@ void GuardDialog::SetText(uint32_t id, const std::string& text)
 	}
 }
 
-// Whether the city saved at `path` is the one open in game
 // Whether two paths are the same savegame. Only the region's folder and the file are compared, without case, since the
 // launcher and the game may spell the rest differently (eg. through Wine, or with a different user folder).
 bool GuardDialog::IsSameSavegame(const std::string& a, const std::string& b)
@@ -815,6 +814,7 @@ void GuardDialog::TakeOver(const std::string& path, const std::string& mayor)
 	Log::Line("Set the mayor name to " + mayor + " for this takeover");
 }
 
+// Whether the city saved at `path` is the one open in game
 bool GuardDialog::IsOpenCity(const std::string& path)
 {
 	cISC4AppPtr pApp;

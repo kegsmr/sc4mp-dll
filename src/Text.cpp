@@ -79,7 +79,7 @@ std::string Text::WideToUtf8(const std::wstring& text)
 // Estimates how wide text is in the chat lines' font. The pinned gzcom-dll has no way to ask the game's font (cIGZFont),
 // so this uses widths of the chat lines' font (DataInsetLegend) measured in game at 1024x768, with the pixel between
 // letters, rounded up a little so a message doesn't run into the name before it. Eg. "Keg (1):" is about 36 pixels wide
-// in game, and 40 here. (The widths before were measured from a scaled down screenshot, so the colon was hidden.)
+// in game, and 40 here.
 // The claimed city warning's GenBodyMedium is a little narrower, so this is safe for it too.
 int32_t Text::EstimateWidth(const std::wstring& text)
 {
