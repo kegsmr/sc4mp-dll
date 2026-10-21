@@ -24,7 +24,6 @@
 #include <cwchar>
 #include <iterator>
 #include <vector>
-#include <windowsx.h>
 
 // A random ID, which must not be used by any other plugin
 static constexpr uint32_t kChatPanelServiceID = 0x7B3E9A5F;
@@ -147,9 +146,6 @@ static constexpr int32_t kTitleFontScale = 9;		// the title's font (DataInsetHea
 static constexpr size_t kNameLength = 20;			// a longer player name is shortened
 static constexpr int32_t kNameGap = 4;				// between a player's name and their message
 
-static constexpr uint32_t kGZWinMessageCommand = 3;
-static constexpr uint32_t kGZWinCommandButtonClicked = 0x287259F6;
-static constexpr LPARAM kKeyRepeatFlag = 1 << 30;
 static constexpr int kMaxWinDepth = 32;	// in case a window's parent chain loops
 
 static const char* const kTitle = "SC4MP Chat";
@@ -328,6 +324,7 @@ void ChatPanel::Stop()
 
 	Detach();
 	SetKeyFilter(false);
+	SetCanvasFilter(false);
 
 	cIGZFrameWork* pFramework = RZGetFrameWork();
 	if (pFramework)
@@ -408,15 +405,19 @@ void ChatPanel::Attach(cIGZWin* pNewParent, bool region)
 	{
 		Log::Line("Unable to listen for keys, so Enter won't open the chat (the Chat button still works)");
 	}
+	if (!SetCanvasFilter(true))
+	{
+		Log::Line("Unable to watch the game window's messages, so the game's City Saved message won't be hidden");
+	}
 
 	Log::Line("Showing the chat panel");
 }
 
 void ChatPanel::Detach()
 {
-	typing = false;
-	input.clear();
+	typing = false;	// the unsent text is kept, and shown in the next view's panel
 	StopDragging();
+	ReleaseFocus();
 
 	if (pWin)
 	{
@@ -457,6 +458,7 @@ void ChatPanel::StartTyping()
 	typing = true;
 	ResetCaret();
 	ShowInput();
+	TakeFocus();
 }
 
 void ChatPanel::Post(const std::string& text, bool history, const std::string& name, const std::string& color, bool own)
@@ -497,6 +499,13 @@ bool ChatPanel::QueryInterface(uint32_t riid, void** ppvObj)
 	if (riid == GZIID_cIGZWinProc)
 	{
 		*ppvObj = static_cast<cIGZWinProc*>(this);
+		AddRef();
+		return true;
+	}
+
+	if (riid == kGZIID_cIGZWinMessageFilter)
+	{
+		*ppvObj = static_cast<cIGZWinMessageFilter*>(this);
 		AddRef();
 		return true;
 	}
@@ -603,8 +612,8 @@ bool ChatPanel::OnTick(uint32_t unknown1)
 	return true;
 }
 
-// The game's button clicks, and the mouse on the panel. What the panel handles doesn't reach the map under it, and the
-// rest (eg. drawing) is left to the game.
+// The game's button clicks, the mouse on the panel, and the keys while it has the focus. What the panel handles doesn't
+// reach the map under it or the game's shortcuts, and the rest (eg. drawing) is left to the game.
 bool ChatPanel::DoWinProcMessage(cIGZWin* pSender, cGZMessage& msg)
 {
 	int32_t x = static_cast<int32_t>(msg.dwData1);
@@ -625,9 +634,7 @@ bool ChatPanel::DoWinProcMessage(cIGZWin* pSender, cGZMessage& msg)
 		StopDragging();
 		return true;
 	case kGZWinMessageMouseDownR:
-	case kGZWinMessageMouseDownM:
 	case kGZWinMessageMouseUpR:
-	case kGZWinMessageMouseUpM:
 		return true;
 	case kGZWinMessageMouseMove:
 		if (resizing)
@@ -644,6 +651,24 @@ bool ChatPanel::DoWinProcMessage(cIGZWin* pSender, cGZMessage& msg)
 	case kGZWinMessageMouseWheel:
 		Wheel(msg);
 		return true;
+	case kGZWinMessageCharacter:
+	case kGZWinMessageKeyDown:
+	case kGZWinMessageKeyUp:
+		if (&msg == filteredKey)
+		{
+			filteredKey = nullptr;
+			return true;	// the key filter has typed it already
+		}
+		return HandleKey(msg);
+	case kGZWinMessageKillFocus:
+		// The player turned back to the game, eg. by clicking the map, so the typed text is kept for next time. The focus
+		// is the game's to give then.
+		hasFocus = false;
+		if (typing)
+		{
+			PauseTyping();
+		}
+		return false;
 	}
 
 	return false;
@@ -691,44 +716,65 @@ bool ChatPanel::Click(uint32_t buttonID)
 	return false;
 }
 
+// The game's key filter, which sees the keys before the window with the focus. Only Enter is taken, to open the chat
+// while the panel doesn't have the focus.
+bool ChatPanel::DoMessage(cIGZWin* pSender, cGZMessage& filtered)
+{
+	if (filtered.dwMessageType != kGZWinMessageFilterKey || filtered.dwData3 == 0)
+	{
+		return false;
+	}
+	cGZMessage& msg = *reinterpret_cast<cGZMessage*>(filtered.dwData3);
+
+	// While the player types, every key is the chat's, so the game's shortcuts (and Esc) don't act on it. The game may
+	// still send it on to the panel, which then leaves it alone.
+	if (typing)
+	{
+		HandleKey(msg);
+		filteredKey = &msg;
+		return true;
+	}
+
+	if (msg.dwData1 != VK_RETURN)
+	{
+		return false;
+	}
+
+	if (msg.dwMessageType == kGZWinMessageKeyUp)
+	{
+		enterDown = false;
+		return false;
+	}
+
+	if (msg.dwMessageType != kGZWinMessageKeyDown)
+	{
+		return false;
+	}
+
+	// The game's messages don't say if the key was already down, so a held Enter is kept track of here
+	bool repeat = enterDown;
+	enterDown = true;
+	if (repeat || typing || !pWin || uiHidden)
+	{
+		return false;	// held, already typing, no panel in this view, or it's hidden with the game's UI
+	}
+
+	if (GameWantsEnter())
+	{
+		Log::Line("Enter was left to the game, since one of its dialogs or text boxes has it, or the player is driving");
+		return false;
+	}
+
+	StartTyping();
+	return true;
+}
+
+// The game window's messages, which are only watched for the game's "City Saved." message box
 LRESULT ChatPanel::FilterMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, bool& handled)
 {
 	handled = false;
 	gameWindow = hWnd;
 	CheckSavedDialog(true);
-
-	if (!pWin || uiHidden)
-	{
-		return 0;	// no panel in this view, or it's hidden with the game's UI
-	}
-
-	if (uMsg >= WM_MOUSEFIRST && uMsg <= WM_MOUSELAST)
-	{
-		// The mouse is left to the game, which gives the panel its own. A press elsewhere is only watched for: it's the
-		// player turning back to the game, so the keys go to it again, and the typed text is kept for next time.
-		bool press = uMsg == WM_LBUTTONDOWN || uMsg == WM_RBUTTONDOWN || uMsg == WM_MBUTTONDOWN;
-		if (typing && press && !IsOnPanel(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)))
-		{
-			PauseTyping();
-		}
-	}
-	else if (typing)
-	{
-		handled = HandleTypingKey(hWnd, uMsg, wParam, lParam);
-	}
-	else if (uMsg == WM_KEYDOWN && wParam == VK_RETURN && (lParam & kKeyRepeatFlag) == 0)
-	{
-		if (GameWantsEnter())
-		{
-			Log::Line("Enter was left to the game, since one of its dialogs or text boxes has it, or the player is driving");
-		}
-		else
-		{
-			StartTyping();
-			handled = true;
-		}
-	}
-
 	return 0;
 }
 
@@ -1083,15 +1129,6 @@ void ChatPanel::ClampToView(int32_t& left, int32_t& top) const
 	}
 }
 
-// Whether a point in the game window (where its Win32 mouse messages are) is on the panel
-bool ChatPanel::IsOnPanel(int32_t x, int32_t y) const
-{
-	int32_t left = 0;
-	int32_t top = 0;
-	GetPanelOrigin(left, top);
-	return x >= left && y >= top && x < left + pWin->GetW() && y < top + pWin->GetH();
-}
-
 // Where the panel is in the game window. Its own place is in its view's window, which is in its parent's, and so on.
 void ChatPanel::GetPanelOrigin(int32_t& left, int32_t& top) const
 {
@@ -1357,70 +1394,84 @@ bool ChatPanel::IsOnChild(uint32_t id, int32_t x, int32_t y) const
 		&& x >= pChild->GetL() && y >= pChild->GetT() && x < pChild->GetL() + pChild->GetW() && y < pChild->GetT() + pChild->GetH();
 }
 
-// Takes the keys while the player types, so the game doesn't also act on them (eg. B for bulldoze)
-bool ChatPanel::HandleTypingKey(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+// The keys that come to the panel while it has the focus. They're all kept from the game while the player types, so it
+// doesn't also act on them (eg. B for bulldoze).
+bool ChatPanel::HandleKey(const cGZMessage& msg)
 {
-	switch (uMsg)
+	// Once a game, since what the messages hold wasn't seen in game yet
+	if (msg.dwMessageType == kGZWinMessageCharacter && !loggedCharacter)
 	{
-	case WM_KEYDOWN:
-		if (wParam == VK_RETURN)
-		{
-			Send();
-		}
-		else if (wParam == VK_PRIOR)
-		{
-			ScrollBy(static_cast<int>(lineCount) - 1);
-		}
-		else if (wParam == VK_NEXT)
-		{
-			ScrollBy(1 - static_cast<int>(lineCount));
-		}
-		else if (wParam == VK_ESCAPE)
-		{
-			StopTyping();
-		}
-		else if (wParam == 'V' && GetKeyState(VK_CONTROL) < 0)
-		{
-			Paste(hWnd);
-		}
-		else
-		{
-			// The game's message loop normally turns the key into a WM_CHAR, which comes next.
-			// If it didn't, turn it into text here.
-			MSG pending;
-			if (!PeekMessageW(&pending, nullptr, WM_CHAR, WM_DEADCHAR, PM_NOREMOVE))
-			{
-				BYTE keys[256]{};
-				wchar_t chars[4]{};
-				if (GetKeyboardState(keys))
-				{
-					int count = ToUnicode(static_cast<UINT>(wParam), (lParam >> 16) & 0xFF, keys, chars, 4, 0);
-					for (int i = 0; i < count; i++)
-					{
-						Type(chars[i]);
-					}
-				}
-			}
-		}
-		return true;
-	case WM_CHAR:
-	{
-		wchar_t c = static_cast<wchar_t>(wParam);
-		if (!IsWindowUnicode(hWnd) && wParam >= 0x80)
-		{
-			// An ANSI window gets characters in the Windows code page
-			char byte = static_cast<char>(wParam);
-			MultiByteToWideChar(CP_ACP, 0, &byte, 1, &c, 1);
-		}
-		Type(c);
-		return true;
+		Log::Line("A character on the chat panel: d1=0x" + ToHex(msg.dwData1) + " d2=0x" + ToHex(msg.dwData2) + " d3=0x" + ToHex(msg.dwData3));
+		loggedCharacter = true;
 	}
-	case WM_KEYUP:
-	case WM_DEADCHAR:
-		return true;
+	if (msg.dwMessageType == kGZWinMessageKeyDown && !loggedKeyDown)
+	{
+		Log::Line("A key press on the chat panel: d1=0x" + ToHex(msg.dwData1) + " d2=0x" + ToHex(msg.dwData2) + " d3=0x" + ToHex(msg.dwData3));
+		loggedKeyDown = true;
 	}
 
-	return false;
+	// The key filter may not see Enter's release while the panel takes it
+	if (msg.dwMessageType == kGZWinMessageKeyUp && msg.dwData1 == VK_RETURN)
+	{
+		enterDown = false;
+	}
+
+	if (!typing)
+	{
+		return false;
+	}
+
+	if (msg.dwMessageType == kGZWinMessageCharacter)
+	{
+		TypeCharacter(msg.dwData1);
+	}
+	else if (msg.dwMessageType == kGZWinMessageKeyDown)
+	{
+		switch (msg.dwData1)
+		{
+		case VK_RETURN:
+			enterDown = true;
+			Send();
+			break;
+		case VK_PRIOR:
+			ScrollBy(static_cast<int>(lineCount) - 1);
+			break;
+		case VK_NEXT:
+			ScrollBy(1 - static_cast<int>(lineCount));
+			break;
+		case VK_ESCAPE:
+			StopTyping();
+			break;
+		case 'V':
+			if (GetKeyState(VK_CONTROL) < 0)
+			{
+				Paste();
+			}
+			break;
+		}
+	}
+
+	return true;
+}
+
+// Types a Character message's character, which is taken to be WM_CHAR's. An ANSI window gets the characters past ASCII in
+// the Windows code page, as a byte, which the game may pass on sign-extended (its cIGZWin::GZOnCharacter takes an int8_t).
+void ChatPanel::TypeCharacter(uint32_t code)
+{
+	bool ansiByte = code >= 0xFFFFFF80;
+	if (code >= 0x80 && code <= 0xFF && (!gameWindow || !IsWindowUnicode(gameWindow)))
+	{
+		ansiByte = true;
+	}
+
+	wchar_t c = static_cast<wchar_t>(code);
+	if (ansiByte)
+	{
+		char byte = static_cast<char>(code);
+		MultiByteToWideChar(CP_ACP, 0, &byte, 1, &c, 1);
+	}
+
+	Type(c);
 }
 
 void ChatPanel::Type(wchar_t c)
@@ -1450,9 +1501,9 @@ void ChatPanel::Type(wchar_t c)
 	ShowInput();
 }
 
-void ChatPanel::Paste(HWND hWnd)
+void ChatPanel::Paste()
 {
-	if (!OpenClipboard(hWnd))
+	if (!OpenClipboard(gameWindow))
 	{
 		return;
 	}
@@ -1521,15 +1572,81 @@ void ChatPanel::Send()
 void ChatPanel::StopTyping()
 {
 	typing = false;
+	filteredKey = nullptr;
 	input.clear();
 	ShowInput();
+	ReleaseFocus();
 }
 
 // Stops typing but keeps the text, which is shown in the field until the player types again
 void ChatPanel::PauseTyping()
 {
 	typing = false;
+	filteredKey = nullptr;
 	ShowInput();
+	ReleaseFocus();
+}
+
+// The keys go to the window with the game's focus, so the panel takes it while the player types. The panel only accepts
+// it then, so a click on it doesn't take the keys from the game's shortcuts otherwise.
+void ChatPanel::TakeFocus()
+{
+	cIGZWinMgrPtr pWinMgr;
+	if (!pWin || !pWinMgr || hasFocus)
+	{
+		return;
+	}
+
+	cIGZWin* pFocus = pWinMgr->GZGetFocus();
+	if (pFocus != pWin)
+	{
+		pPreviousFocus = pFocus;
+	}
+
+	pWin->SetFlag(kGZWinFlagAcceptFocus, true);
+	if (!pWinMgr->GZSetFocus(pWin))
+	{
+		Log::Line("Unable to give the chat panel the game's focus, so it won't get the keys");
+		return;
+	}
+	hasFocus = true;
+}
+
+// Gives the focus back to what had it before typing (or else the view, or no window), so the game's shortcuts work again
+void ChatPanel::ReleaseFocus()
+{
+	cIGZWin* pPrevious = pPreviousFocus;
+	bool held = hasFocus;
+	hasFocus = false;
+	pPreviousFocus = nullptr;
+
+	if (!pWin)
+	{
+		return;
+	}
+	pWin->SetFlag(kGZWinFlagAcceptFocus, false);
+
+	cIGZWinMgrPtr pWinMgr;
+	if (!held || !pWinMgr || pWinMgr->GZGetFocus() != pWin)
+	{
+		return;	// it went elsewhere already
+	}
+
+	cIGZWin* candidates[] = { pPrevious, pParent, nullptr };
+	for (cIGZWin* pCandidate : candidates)
+	{
+		if (pCandidate && !pWinMgr->IsWindowValid(pCandidate))
+		{
+			continue;
+		}
+
+		if (pWinMgr->GZSetFocus(pCandidate) && pWinMgr->GZGetFocus() != pWin)
+		{
+			return;
+		}
+	}
+
+	Log::Line("Unable to give the game's focus back from the chat panel");
 }
 
 // Whether Enter is meant for the game instead, eg. to finish typing a cheat code, close a message box or in U-Drive-It
@@ -2316,9 +2433,42 @@ void ChatPanel::SetChildVisible(uint32_t id, bool visible)
 	}
 }
 
+// The game's key filter, for Enter
 bool ChatPanel::SetKeyFilter(bool add)
 {
 	if (keyFilterAdded == add)
+	{
+		return true;
+	}
+
+	cIGZWinMgrPtr pWinMgr;
+	if (!pWinMgr)
+	{
+		return false;
+	}
+
+	bool done = false;
+	if (add)
+	{
+		done = pWinMgr->GZRegisterKeyFilter(this);
+	}
+	else
+	{
+		done = pWinMgr->GZUnregisterKeyFilter(this);
+	}
+	if (!done)
+	{
+		return false;
+	}
+
+	keyFilterAdded = add;
+	return true;
+}
+
+// A Win32 filter on the game's canvas, which sees the game window's messages
+bool ChatPanel::SetCanvasFilter(bool add)
+{
+	if (canvasFilterAdded == add)
 	{
 		return true;
 	}
@@ -2335,6 +2485,6 @@ bool ChatPanel::SetKeyFilter(bool add)
 		return false;
 	}
 
-	keyFilterAdded = add;
+	canvasFilterAdded = add;
 	return true;
 }
