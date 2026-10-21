@@ -17,6 +17,18 @@ static const uint32_t kGZIID_cIGZWinGen = 0x5386D516;
 static const uint32_t kGZIID_cIGZWinText = 0x212CDC1F;
 static const uint32_t kGZIID_cIGZWinTextEdit = 0x231A1C57;	// only queried, to see if the player is typing in the game's own text box
 
+// The mouse messages a window's proc gets (cGZMessage::dwMessageType), as seen in game on the chat panel. Their dwData1
+// and dwData2 are the point, from the window's top left corner. Only the left button was tried. The two types after each
+// of its own are guessed to be the right and middle buttons' (in some order), which are handled alike.
+static const uint32_t kGZWinMessageMouseDownL = 0x07;
+static const uint32_t kGZWinMessageMouseDownR = 0x08;
+static const uint32_t kGZWinMessageMouseDownM = 0x09;
+static const uint32_t kGZWinMessageMouseUpL = 0x0A;
+static const uint32_t kGZWinMessageMouseUpR = 0x0B;
+static const uint32_t kGZWinMessageMouseUpM = 0x0C;
+static const uint32_t kGZWinMessageMouseMove = 0x0D;
+static const uint32_t kGZWinMessageMouseWheel = 0x0E;	// dwData3 is taken to be the turn, in WHEEL_DELTA units, up if positive
+
 // A window that holds other windows, eg. a dialog
 class cIGZWinGen : public cIGZUnknown
 {

@@ -22,8 +22,8 @@ class cIGZWin;
 // The window is made by the game from the UI script in ui/ChatPanel.ui, so it looks like the game's own.
 // Only Post() may be called from another thread: it queues the line, and the queue is emptied every
 // frame on the game thread (OnTick), since the game's windows must only be used there.
-// Keys come from the game window's own Win32 messages (FilterMessage), which also run on the game thread.
-// So do the mouse buttons on the panel, so the map under it doesn't also get them.
+// The mouse comes to the panel's window proc (DoWinProcMessage) from the game, which keeps what the panel handles from
+// the map under it. Keys come from the game window's own Win32 messages (FilterMessage), which also run on the game thread.
 class ChatPanel final : public cRZBaseSystemService, private cIGZWinProc, private cIGZWinProcFilterW32
 {
 public:
@@ -71,8 +71,9 @@ private:
 	LRESULT FilterMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, bool& handled) override;
 
 	bool Click(uint32_t buttonID);
-	bool HandleMouse(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
-	bool IsOnPanel(int32_t x, int32_t y);
+	void Press(int32_t x, int32_t y);
+	void Wheel(const cGZMessage& msg);
+	bool IsOnPanel(int32_t x, int32_t y) const;
 	void GetPanelOrigin(int32_t& left, int32_t& top) const;
 	uint32_t GetButtonAt(int32_t x, int32_t y) const;
 	bool IsOnChild(uint32_t id, int32_t x, int32_t y) const;
@@ -80,7 +81,7 @@ private:
 	void ResetCaret();
 	void FollowGameUI();
 	void CloseSavedDialog();
-	void StartDragging(HWND hWnd, int32_t x, int32_t y);
+	void StartDragging(int32_t x, int32_t y);
 	void Drag(int32_t x, int32_t y);
 	void StopDragging();
 	void ClampToView(int32_t& left, int32_t& top) const;
@@ -125,7 +126,7 @@ private:
 	size_t GetMaxScroll() const;
 	void ScrollBy(int rows);
 	void ScrollToBottom();
-	void PressScrollbar(int32_t y, bool press);
+	void FollowScrollbar();
 	void ShowScroll(bool open);
 
 	enum class ChipSpot
@@ -164,12 +165,9 @@ private:
 	int32_t coverBottom = 0;	// the chip's top while it's below a covering window
 	bool moved = false;	// the player dragged the open panel, to openLeft and openTop, which are kept while the game runs
 	bool dragging = false;
-	bool scrollDragging = false;	// the player holds the mouse on the scrollbar's track
 	int32_t dragX = 0;	// where the panel was grabbed, from its top left corner
 	int32_t dragY = 0;
-	HWND dragCapture = nullptr;
-	uint32_t buttonsDown = 0;	// the mouse buttons (MK_LBUTTON, etc.) pressed on the panel, whose release is kept from the game too
-	bool loggedCoveredClick = false;
+	bool loggedWheel = false;	// the wheel's first message is logged, since what it holds isn't sure
 	ULONGLONG savedDialogDeadline = 0;	// until when the game's "City Saved." is looked for, after a save
 	ULONGLONG lastSavedDialogCheck = 0;
 	HWND gameWindow = nullptr;	// the game's window, from the messages it gets
@@ -181,6 +179,7 @@ private:
 
 	std::deque<Line> lines;	// the last kMaxLines rows, oldest first
 	size_t scrollRows = 0;	// how far the player has scrolled up from the newest row
+	int32_t scrollbarValue = 0;	// the game's scrollbar's value, as last set, to see when the player moves it
 	size_t newBelow = 0;	// messages that came while scrolled up
 	std::wstring input;
 	bool typing = false;
