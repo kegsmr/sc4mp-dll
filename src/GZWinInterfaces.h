@@ -31,6 +31,12 @@ static const uint32_t kGZWinMessageCharacter = 0x04;
 static const uint32_t kGZWinMessageKeyDown = 0x05;
 static const uint32_t kGZWinMessageKeyUp = 0x06;
 
+// What a key filter (cIGZWinMessageFilter) gets, as seen in game: each key message as it's sent to the window with the
+// focus, and again after, with that window in dwData1, the key message's type in dwData2 and the key message itself (a
+// cGZMessage*) in dwData3
+static const uint32_t kGZWinMessageFilterKey = 0x1A;
+static const uint32_t kGZWinMessageFilterKeyDone = 0x1B;
+
 // dwData1 and dwData2 are the point, from the window's top left corner, and dwData3 has the modifier keys in its high word
 // and the wheel's turn (in WHEEL_DELTA units, up if positive) in its low word. The game doesn't send the middle button's.
 static const uint32_t kGZWinMessageMouseDownL = 0x07;

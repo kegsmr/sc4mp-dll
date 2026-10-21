@@ -572,6 +572,11 @@ bool ChatPanel::DoWinProcMessage(cIGZWin* pSender, cGZMessage& msg)
 	case kGZWinMessageCharacter:
 	case kGZWinMessageKeyDown:
 	case kGZWinMessageKeyUp:
+		if (&msg == filteredKey)
+		{
+			filteredKey = nullptr;
+			return true;	// the key filter has typed it already
+		}
 		return HandleKey(msg);
 	case kGZWinMessageKillFocus:
 		// The player turned back to the game, eg. by clicking the map, so the typed text is kept for next time. The focus
@@ -631,8 +636,23 @@ bool ChatPanel::Click(uint32_t buttonID)
 
 // The game's key filter, which sees the keys before the window with the focus. Only Enter is taken, to open the chat
 // while the panel doesn't have the focus.
-bool ChatPanel::DoMessage(cIGZWin* pSender, cGZMessage& msg)
+bool ChatPanel::DoMessage(cIGZWin* pSender, cGZMessage& filtered)
 {
+	if (filtered.dwMessageType != kGZWinMessageFilterKey || filtered.dwData3 == 0)
+	{
+		return false;
+	}
+	cGZMessage& msg = *reinterpret_cast<cGZMessage*>(filtered.dwData3);
+
+	// While the player types, every key is the chat's, so the game's shortcuts (and Esc) don't act on it. The game may
+	// still send it on to the panel, which then leaves it alone.
+	if (typing)
+	{
+		HandleKey(msg);
+		filteredKey = &msg;
+		return true;
+	}
+
 	if (msg.dwData1 != VK_RETURN)
 	{
 		return false;
@@ -1343,6 +1363,7 @@ void ChatPanel::Send()
 void ChatPanel::StopTyping()
 {
 	typing = false;
+	filteredKey = nullptr;
 	input.clear();
 	ShowInput();
 	ReleaseFocus();
@@ -1352,6 +1373,7 @@ void ChatPanel::StopTyping()
 void ChatPanel::PauseTyping()
 {
 	typing = false;
+	filteredKey = nullptr;
 	ShowInput();
 	ReleaseFocus();
 }

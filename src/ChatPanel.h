@@ -195,6 +195,7 @@ private:
 	bool typing = false;
 	bool hasFocus = false;	// the panel took the game's focus to type, and hasn't lost it
 	cIGZWin* pPreviousFocus = nullptr;	// what had the focus before, to give it back to (only used while the game says it's valid)
+	cGZMessage* filteredKey = nullptr;	// the key message the key filter just typed, if the game sends it on to the panel too
 	bool enterDown = false;	// Enter is held, so its repeats don't open the chat again
 	bool caretShown = true;	// the blinking caret, while typing
 	ULONGLONG caretTime = 0;
