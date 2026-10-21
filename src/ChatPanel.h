@@ -18,7 +18,8 @@ class cIGZWin;
 // A chat window in the city and region views. It shows the last lines the launcher sent, and the
 // player presses Enter (or clicks the send button) to type a message, Enter again to send it and Esc to cancel.
 // The title bar shows the server's name and the launcher's save status. The panel can be minimized to a small button
-// in the bottom right corner, which it starts as. The choice is kept while the game runs.
+// in the bottom right corner, which it starts as. The choice is kept while the game runs. The open panel can be dragged by its
+// title band and resized by its bottom corners, and its place and size are kept while the game runs too.
 //
 // The window is made by the game from the UI script in ui/ChatPanel.ui, so it looks like the game's own.
 // Only Post() may be called from another thread: it queues the line, and the queue is emptied every
@@ -92,6 +93,8 @@ private:
 	void StartDragging(int32_t x, int32_t y);
 	void Drag(int32_t x, int32_t y);
 	void StopDragging();
+	void StartResizing(int32_t x, int32_t y, bool left);
+	void Resize(int32_t x, int32_t y);
 	void ClampToView(int32_t& left, int32_t& top) const;
 	bool HandleKey(const cGZMessage& msg);
 	void TypeCharacter(uint32_t code);
@@ -124,9 +127,14 @@ private:
 	};
 
 	void AddLine(const Notice& notice);
+	void WrapNotice(const Notice& notice);
+	void Rewrap();
+	int32_t GetLineWidth() const;
 	void ShowLine(uint32_t row, const Line* line, bool open);
 	void SetMinimized(bool value);
 	void Layout();
+	void FitChildren();
+	void FitChild(uint32_t id, int32_t dx, int32_t dy, int32_t dw, int32_t dh);
 	void PlaceWindow(cIGZWin* pTarget, int32_t left, int32_t top);
 	void ShowLines();
 	void ShowInput();
@@ -182,6 +190,18 @@ private:
 	bool dragging = false;
 	int32_t dragX = 0;	// where the panel was grabbed, from its top left corner
 	int32_t dragY = 0;
+	size_t lineCount = 8;	// the rows the open panel shows, which the player can change by resizing it (kLineCount in the UI script)
+	int32_t extraWidth = 0;	// how much wider the player made the open panel than the UI script's, which its lines, title and text box get
+	int32_t layoutWidth = 0;	// the open panel's size that its windows are laid out for, from the UI script's until FitChildren
+	int32_t layoutHeight = 0;
+	bool resizing = false;
+	bool resizingLeft = false;	// by the bottom left corner, which moves the left edge, or else the bottom right one
+	int32_t resizeX = 0;	// where the corner was pressed, in the view
+	int32_t resizeY = 0;
+	int32_t resizeLeft = 0;	// the open panel when the corner was pressed
+	int32_t resizeWidth = 0;
+	int32_t resizeHeight = 0;
+	size_t resizeLineCount = 0;
 	bool loggedWheel = false;	// the wheel's first message is logged, since what it holds isn't sure
 	bool loggedCharacter = false;	// and so are the first character and key press on the panel
 	bool loggedKeyDown = false;
@@ -195,6 +215,7 @@ private:
 	std::optional<std::string> pendingServerName;
 	std::optional<std::string> pendingProgress;
 
+	std::deque<Notice> notices;	// the last kMaxLines messages, to wrap them again when the panel's width changes
 	std::deque<Line> lines;	// the last kMaxLines rows, oldest first
 	std::string progress;	// the save push's progress, shown after the lines while it isn't empty
 	size_t scrollRows = 0;	// how far the player has scrolled up from the newest row

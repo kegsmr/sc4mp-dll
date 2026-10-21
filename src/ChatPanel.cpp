@@ -57,6 +57,7 @@ static constexpr uint32_t kChipIconOffset = 0x10;	// each status ring on the chi
 static constexpr int32_t kChipWidth = 56;	// the 50 pixel button, with room for the count bubble over its top right
 static constexpr int32_t kChipHeight = 56;
 static constexpr int32_t kTitleBandHeight = 34;	// the frame's title band, by which the panel is dragged
+static constexpr int32_t kResizeCorner = 16;		// how far into a bottom corner a press resizes the panel, instead of dragging it
 static constexpr int32_t kRightMargin = 12;			// the chip and the open panel are in the view's top right corner
 static constexpr int32_t kTopMargin = 16;			// in the city view, whose corner is free
 static constexpr int32_t kChipBottomMargin = 48;	// above the city view's news ticker, and the region view's bottom bar
@@ -104,6 +105,13 @@ static_assert(static_cast<uint32_t>(kNameColorCount) <= kResultColorOffset && kR
 // shown ones can be clicked.
 static constexpr uint32_t kButtonIDs[] = { kFieldID, kNewHintTextID };	// the field is clicked to type
 
+// How the panel's windows follow its size (see FitChildren). The rows' windows are stretched with the title, and the status
+// icons move with the title bar's buttons.
+static constexpr uint32_t kRightEdgeIDs[] = { kStatusTipID, kMinimizeButtonID, kScrollbarID };
+static constexpr uint32_t kBottomEdgeIDs[] = { kFieldID, kTypingFieldID, kInputID };
+static constexpr uint32_t kCornerIDs[] = { kChatButtonID, kNewHintID, kNewHintTextID };
+static constexpr uint32_t kWideIDs[] = { kTitleID, kFieldID, kTypingFieldID, kInputID };
+
 // Windows in the title bar, shown unless the panel is minimized
 static constexpr uint32_t kTitleBarIDs[] = { kTitleID, kStatusTipID, kMinimizeButtonID };
 
@@ -120,10 +128,16 @@ static constexpr std::pair<const char*, uint32_t> kStatusIcons[] = {
 	{ "refreshed", 0x7B3E9A92 },
 };
 
-static constexpr size_t kLineCount = 8;
+static constexpr size_t kLineCount = 8;				// the rows the UI script lays the panel out for
+static constexpr size_t kMinLineCount = 4;			// the rows the player can resize the panel to
+static constexpr size_t kMaxLineCount = 16;			// the rows in the UI script, as many as its IDs leave room for
+static constexpr int32_t kLineHeight = 18;
+static constexpr int32_t kLineWidth = 320;			// the rows' windows in the UI script
+static constexpr int32_t kLineGutter = 2;			// their text's gutters on each side
+static constexpr int32_t kMinWidth = 300;			// so the title, the status and the text box still fit
+static constexpr int32_t kMaxWidth = 640;			// as wide as the text field's middle is drawn (FIELD_MIDDLE_WIDTH in make-ui-images.py)
 static constexpr size_t kMaxLines = 200;			// rows kept to scroll back through, wrapped rows included
 static constexpr int kWheelRows = 3;				// rows scrolled per notch of the mouse wheel
-static constexpr size_t kLineLength = 44;			// characters that fit on a line, roughly, since the font isn't monospaced
 static constexpr int32_t kInputWidth = 276;			// the input's text window, less its gutters; the end of a longer message is shown while typing it
 static constexpr size_t kMaxInputLength = 500;
 static constexpr size_t kMaxInbox = 250;			// more than the launcher replays on connecting (GameBridge.RECENT_LINES), which comes all at once
@@ -157,18 +171,37 @@ static std::string ToHex(uint32_t value)
 	return text;
 }
 
-// Splits a line into pieces that fit the panel, breaking at spaces where possible
-static std::vector<std::wstring> Wrap(const std::wstring& text)
+// Splits a line into pieces that fit `firstWidth` pixels on the first row and `width` on the rest (see
+// Text::EstimateWidth), breaking at spaces where possible
+static std::vector<std::wstring> Wrap(const std::wstring& text, int32_t firstWidth, int32_t width)
 {
 	std::vector<std::wstring> pieces;
 	size_t start = 0;
+	int32_t room = firstWidth;
 
-	while (text.size() - start > kLineLength)
+	while (Text::EstimateWidth(text.substr(start)) > room)
 	{
-		size_t end = text.rfind(L' ', start + kLineLength);
+		// The most characters that fit
+		size_t fit = start;
+		int32_t used = 0;
+		while (fit < text.size())
+		{
+			used += Text::EstimateWidth(std::wstring(1, text[fit]));
+			if (used > room)
+			{
+				break;
+			}
+			fit++;
+		}
+
+		size_t end = text.rfind(L' ', fit);
 		if (end == std::wstring::npos || end <= start)
 		{
-			end = start + kLineLength;	// a word that's too long is cut
+			end = fit;	// a word that's too long is cut
+		}
+		if (end == start)
+		{
+			end = start + 1;	// at least a character a row, however narrow
 		}
 
 		pieces.push_back(text.substr(start, end - start));
@@ -178,11 +211,13 @@ static std::vector<std::wstring> Wrap(const std::wstring& text)
 		{
 			start++;
 		}
+		room = width;
 	}
 
 	pieces.push_back(text.substr(start));
 	return pieces;
 }
+
 
 // Returns the color in `colors` (eg. kNameColors) nearest to the launcher's, which comes as "[red,green,blue]", or -1 if there's none
 static int FindNearestColor(const std::string& color, const uint8_t colors[][3], int colorCount)
@@ -353,8 +388,12 @@ void ChatPanel::Attach(cIGZWin* pNewParent, bool region)
 		openLeft = pWin->GetL();
 		openTop = pWin->GetT();
 	}
-	openWidth = pWin->GetW();
-	openHeight = pWin->GetH();
+
+	// The UI script's size, which its windows are laid out for, and the size the player has resized the panel to this game
+	layoutWidth = pWin->GetW();
+	layoutHeight = pWin->GetH();
+	openWidth = layoutWidth + extraWidth;
+	openHeight = layoutHeight + (static_cast<int32_t>(lineCount) - static_cast<int32_t>(kLineCount)) * kLineHeight;
 
 	Layout();
 	ShowLines();
@@ -598,6 +637,11 @@ bool ChatPanel::DoWinProcMessage(cIGZWin* pSender, cGZMessage& msg)
 	case kGZWinMessageMouseUpR:
 		return true;
 	case kGZWinMessageMouseMove:
+		if (resizing)
+		{
+			Resize(x, y);
+			return true;
+		}
 		if (!dragging)
 		{
 			return false;	// left to the game, which shows the buttons' tooltips and hover art
@@ -755,6 +799,14 @@ void ChatPanel::Press(int32_t x, int32_t y)
 	{
 		Click(clicked);
 	}
+	else if (y >= openHeight - kResizeCorner && x < kResizeCorner)
+	{
+		StartResizing(x, y, true);
+	}
+	else if (y >= openHeight - kResizeCorner && x >= openWidth - kResizeCorner)
+	{
+		StartResizing(x, y, false);
+	}
 	else
 	{
 		StartDragging(x, y);
@@ -833,15 +885,118 @@ void ChatPanel::Drag(int32_t x, int32_t y)
 	}
 }
 
+// Ends dragging or resizing the panel
 void ChatPanel::StopDragging()
 {
 	cIGZWinMgrPtr pWinMgr;
-	if (dragging && pWin && pWinMgr && pWinMgr->GZGetCapture() == pWin)
+	if ((dragging || resizing) && pWin && pWinMgr && pWinMgr->GZGetCapture() == pWin)
 	{
 		pWinMgr->GZReleaseCapture(pWin);
 	}
 
 	dragging = false;
+	resizing = false;
+}
+
+// The panel is resized by its bottom corners, from a press on one at a point from its top left corner
+void ChatPanel::StartResizing(int32_t x, int32_t y, bool left)
+{
+	resizing = true;
+	resizingLeft = left;
+	resizeX = pWin->GetL() + x;
+	resizeY = pWin->GetT() + y;
+	resizeLeft = openLeft;
+	resizeWidth = openWidth;
+	resizeHeight = openHeight;
+	resizeLineCount = lineCount;
+
+	// Like dragging, so the moves keep coming when the mouse leaves the panel, and the release ends it
+	cIGZWinMgrPtr pWinMgr;
+	if (pWinMgr)
+	{
+		pWinMgr->GZSetCapture(pWin);
+	}
+}
+
+// Resizes the panel to follow the mouse. The pressed corner follows it, and the opposite edges stay put. The height
+// is whole rows, the panel is kept inside the view, and the size is kept for the rest of the game.
+void ChatPanel::Resize(int32_t x, int32_t y)
+{
+	if (!pWin || !pParent || minimized || GetKeyState(VK_LBUTTON) >= 0)
+	{
+		StopDragging();	// the release was missed, eg. the game lost the focus
+		return;
+	}
+
+	// How far the mouse has moved since the press. The point is from the panel's top left corner, which moves with the left edge.
+	int32_t moveX = pWin->GetL() + x - resizeX;
+	int32_t moveY = pWin->GetT() + y - resizeY;
+
+	int32_t width = resizeWidth + moveX;
+	int32_t maxWidth = pParent->GetW() - resizeLeft;
+	if (resizingLeft)
+	{
+		width = resizeWidth - moveX;
+		maxWidth = resizeLeft + resizeWidth;
+	}
+	if (width > maxWidth)
+	{
+		width = maxWidth;
+	}
+	if (width > kMaxWidth)
+	{
+		width = kMaxWidth;
+	}
+	if (width < kMinWidth)
+	{
+		width = kMinWidth;
+	}
+
+	// The rows nearest to the height, between the title band and the bottom, which stay the same
+	int32_t frame = resizeHeight - static_cast<int32_t>(resizeLineCount) * kLineHeight;
+	int32_t rows = (resizeHeight + moveY - frame + kLineHeight / 2) / kLineHeight;
+	int32_t maxRows = (pParent->GetH() - openTop - frame) / kLineHeight;
+	if (rows > maxRows)
+	{
+		rows = maxRows;
+	}
+	if (rows > static_cast<int32_t>(kMaxLineCount))
+	{
+		rows = static_cast<int32_t>(kMaxLineCount);
+	}
+	if (rows < static_cast<int32_t>(kMinLineCount))
+	{
+		rows = static_cast<int32_t>(kMinLineCount);
+	}
+
+	int32_t left = resizeLeft;
+	if (resizingLeft)
+	{
+		left = resizeLeft + resizeWidth - width;
+	}
+	if (width == openWidth && static_cast<size_t>(rows) == lineCount && left == openLeft)
+	{
+		return;
+	}
+
+	int32_t oldWidth = GetLineWidth();
+	extraWidth += width - openWidth;
+	openWidth = width;
+	openLeft = left;
+	lineCount = static_cast<size_t>(rows);
+	openHeight = frame + rows * kLineHeight;
+	moved = true;	// its place is the player's now, so it isn't put back in the corner at its new size
+
+	if (GetLineWidth() != oldWidth)
+	{
+		Rewrap();
+	}
+	if (scrollRows > GetMaxScroll())
+	{
+		scrollRows = GetMaxScroll();
+	}
+
+	Layout();
 }
 
 // The lines, and the save's progress after them while there's one
@@ -856,11 +1011,11 @@ size_t ChatPanel::GetRowCount() const
 
 size_t ChatPanel::GetMaxScroll() const
 {
-	if (GetRowCount() <= kLineCount)
+	if (GetRowCount() <= lineCount)
 	{
 		return 0;
 	}
-	return GetRowCount() - kLineCount;
+	return GetRowCount() - lineCount;
 }
 
 // Scrolls the chat by `rows`, back to older lines if positive
@@ -934,7 +1089,7 @@ void ChatPanel::ShowScroll(bool open)
 			value = 1;
 		}
 		pScrollbar->SetMinMax(0, maxScroll);
-		pScrollbar->SetPageSize(static_cast<int32_t>(kLineCount));
+		pScrollbar->SetPageSize(static_cast<int32_t>(lineCount));
 		pScrollbar->SetValue(value);
 		scrollbarValue = pScrollbar->GetValue();	// as the scrollbar keeps it
 	}
@@ -1279,10 +1434,10 @@ bool ChatPanel::HandleKey(const cGZMessage& msg)
 			Send();
 			break;
 		case VK_PRIOR:
-			ScrollBy(static_cast<int>(kLineCount) - 1);
+			ScrollBy(static_cast<int>(lineCount) - 1);
 			break;
 		case VK_NEXT:
-			ScrollBy(1 - static_cast<int>(kLineCount));
+			ScrollBy(1 - static_cast<int>(lineCount));
 			break;
 		case VK_ESCAPE:
 			StopTyping();
@@ -1546,68 +1701,16 @@ bool ChatPanel::GameWantsEnter() const
 
 void ChatPanel::AddLine(const Notice& notice)
 {
-	const std::string& text = notice.text;
 	bool chat = !notice.name.empty();
-	int color = -1;
-	int resultColor = -1;
-	if (chat)
-	{
-		color = FindNearestColor(notice.color, kNameColors, kNameColorCount);
-	}
-	else if (!notice.color.empty())
-	{
-		resultColor = FindNearestColor(notice.color, kResultColors, kResultColorCount);
-	}
-
-	std::string namePrefix = notice.name + ":";
-	bool first = true;
 	size_t before = lines.size();
 
-	// Alerts can have several lines
-	size_t start = 0;
-	while (start <= text.size())
+	notices.push_back(notice);
+	while (notices.size() > kMaxLines)
 	{
-		size_t end = text.find('\n', start);
-		if (end == std::string::npos)
-		{
-			end = text.size();
-		}
-
-		std::string line = text.substr(start, end - start);
-		if (!line.empty() && line.back() == '\r')
-		{
-			line.pop_back();
-		}
-		line = Trim(line);
-
-		if (!line.empty())
-		{
-			for (const std::wstring& piece : Wrap(Text::Utf8ToWide(line)))
-			{
-				Line shown;
-				shown.text = Text::WideToUtf8(piece);
-				shown.chat = chat;
-				shown.resultColor = resultColor;
-
-				// Chat starts with "<name>: ", and the name is split off to be shown in its color. The lines it wraps onto have no name.
-				if (first && chat && color >= 0 && shown.text.compare(0, namePrefix.size(), namePrefix) == 0)
-				{
-					shown.name = Shorten(notice.name, kNameLength);
-					if (notice.own)
-					{
-						shown.name += " (You)";	// after shortening, so a long name can't cut it off
-					}
-					shown.color = color;
-					shown.text = Trim(shown.text.substr(namePrefix.size()));
-				}
-				first = false;
-
-				lines.push_back(shown);
-			}
-		}
-
-		start = end + 1;
+		notices.pop_front();
 	}
+
+	WrapNotice(notice);
 
 	// While the player has scrolled up, the lines they're reading stay put, and the new ones are counted below
 	if (scrollRows > 0 && lines.size() > before)
@@ -1631,6 +1734,102 @@ void ChatPanel::AddLine(const Notice& notice)
 	{
 		unread++;
 	}
+}
+
+// Adds a message's rows to `lines`, wrapped to the panel's width
+void ChatPanel::WrapNotice(const Notice& notice)
+{
+	const std::string& text = notice.text;
+	bool chat = !notice.name.empty();
+	int color = -1;
+	int resultColor = -1;
+	if (chat)
+	{
+		color = FindNearestColor(notice.color, kNameColors, kNameColorCount);
+	}
+	else if (!notice.color.empty())
+	{
+		resultColor = FindNearestColor(notice.color, kResultColors, kResultColorCount);
+	}
+
+	std::string namePrefix = notice.name + ":";
+	bool first = true;
+
+	// Alerts can have several lines
+	size_t start = 0;
+	while (start <= text.size())
+	{
+		size_t end = text.find('\n', start);
+		if (end == std::string::npos)
+		{
+			end = text.size();
+		}
+
+		std::string line = text.substr(start, end - start);
+		if (!line.empty() && line.back() == '\r')
+		{
+			line.pop_back();
+		}
+		line = Trim(line);
+
+		if (!line.empty())
+		{
+			// Chat starts with "<name>: ", and the name is split off to be shown in its color, so the message starts after
+			// it on the first row. The rows it wraps onto have no name.
+			std::string name;
+			int32_t width = GetLineWidth();
+			int32_t firstWidth = width;
+			if (first && chat && color >= 0 && line.compare(0, namePrefix.size(), namePrefix) == 0)
+			{
+				name = Shorten(notice.name, kNameLength);
+				if (notice.own)
+				{
+					name += " (You)";	// after shortening, so a long name can't cut it off
+				}
+				line = Trim(line.substr(namePrefix.size()));
+				firstWidth = width - Text::EstimateWidth(Text::Utf8ToWide(name + ":")) - kNameGap;
+			}
+
+			for (const std::wstring& piece : Wrap(Text::Utf8ToWide(line), firstWidth, width))
+			{
+				Line shown;
+				shown.text = Text::WideToUtf8(piece);
+				shown.chat = chat;
+				shown.resultColor = resultColor;
+				if (!name.empty())
+				{
+					shown.name = name;
+					shown.color = color;
+					name.clear();
+				}
+				lines.push_back(shown);
+			}
+			first = false;
+		}
+
+		start = end + 1;
+	}
+}
+
+// Wraps the kept messages again, after the panel's width changed
+void ChatPanel::Rewrap()
+{
+	lines.clear();
+	for (const Notice& notice : notices)
+	{
+		WrapNotice(notice);
+	}
+
+	while (lines.size() > kMaxLines)
+	{
+		lines.pop_front();
+	}
+}
+
+// How wide a row's text can be at the panel's width, in pixels, less its window's gutters
+int32_t ChatPanel::GetLineWidth() const
+{
+	return kLineWidth + extraWidth - 2 * kLineGutter;
 }
 
 void ChatPanel::SetMinimized(bool value)
@@ -1660,6 +1859,7 @@ void ChatPanel::Layout()
 
 	bool open = !minimized;
 
+	FitChildren();
 	ShowLines();
 	SetChildVisible(kBackgroundID, open);
 	SetChildVisible(kInputID, open);
@@ -1727,6 +1927,85 @@ void ChatPanel::Layout()
 	}
 }
 
+// Moves and stretches the panel's windows from the size they're laid out for to the open panel's size. Each keeps to
+// the edges it's anchored to: the title bar's buttons to the right, the text box to the bottom, and so on.
+void ChatPanel::FitChildren()
+{
+	int32_t dw = openWidth - layoutWidth;
+	int32_t dh = openHeight - layoutHeight;
+	if (dw == 0 && dh == 0)
+	{
+		return;
+	}
+
+	for (uint32_t id : kRightEdgeIDs)
+	{
+		FitChild(id, dw, 0, 0, 0);
+	}
+
+	// Some states share an icon, which is moved once
+	std::vector<uint32_t> icons;
+	for (const auto& [state, id] : kStatusIcons)
+	{
+		if (std::find(icons.begin(), icons.end(), id) == icons.end())
+		{
+			icons.push_back(id);
+			FitChild(id, dw, 0, 0, 0);
+		}
+	}
+	for (uint32_t id : kBottomEdgeIDs)
+	{
+		FitChild(id, 0, dh, 0, 0);
+	}
+	for (uint32_t id : kCornerIDs)
+	{
+		FitChild(id, dw, dh, 0, 0);
+	}
+	for (uint32_t id : kWideIDs)
+	{
+		FitChild(id, 0, 0, dw, 0);
+	}
+	FitChild(kBackgroundID, 0, 0, dw, dh);	// the frame, an edge image, which stretches
+	FitChild(kScrollbarID, 0, 0, 0, dh);
+
+	// The rows stay at the top. Their chat text windows are placed after the name by ShowLine.
+	for (uint32_t row = 0; row < kMaxLineCount; row++)
+	{
+		FitChild(kFirstInfoLineID + row, 0, 0, dw, 0);
+		for (uint32_t color = 0; color < static_cast<uint32_t>(kNameColorCount); color++)
+		{
+			FitChild(kFirstNameID + row * kNameLineStep + color, 0, 0, dw, 0);
+		}
+		for (uint32_t color = 0; color < static_cast<uint32_t>(kResultColorCount); color++)
+		{
+			FitChild(kFirstNameID + row * kNameLineStep + kResultColorOffset + color, 0, 0, dw, 0);
+		}
+	}
+
+	layoutWidth = openWidth;
+	layoutHeight = openHeight;
+}
+
+// Moves one of the panel's windows by (dx, dy) and makes it dw wider and dh taller
+void ChatPanel::FitChild(uint32_t id, int32_t dx, int32_t dy, int32_t dw, int32_t dh)
+{
+	cIGZWin* pChild = pWin->GetChildWindowFromID(id);
+	if (!pChild)
+	{
+		return;
+	}
+
+	PlaceWindow(pChild, pChild->GetL() + dx, pChild->GetT() + dy);
+	if (dw != 0)
+	{
+		pChild->SetW(pChild->GetW() + dw);
+	}
+	if (dh != 0)
+	{
+		pChild->SetH(pChild->GetH() + dh);
+	}
+}
+
 // Moves the panel, or one of its windows, to a place in its parent.
 // The pinned gzcom-dll declares GZWinMoveTo one vtable slot late (see GZWinInterfaces.h), so calling it runs the
 // game's next method, which moves the window by an offset. So it's given the distance to the new place.
@@ -1759,21 +2038,21 @@ void ChatPanel::ShowLines()
 
 	// The save's progress is a row after the lines, which isn't kept with them
 	Line progressLine;
-	progressLine.text = Shorten(progress, kLineLength);
+	progressLine.text = Text::ShortenToWidth(progress, GetLineWidth(), 8);
 
-	// The rows shown end `scrollRows` above the newest one
+	// The rows shown end `scrollRows` above the newest one. The UI script's rows past the ones that fit are cleared.
 	size_t end = GetRowCount() - scrollRows;
 	size_t shown = end;
-	if (shown > kLineCount)
+	if (shown > lineCount)
 	{
-		shown = kLineCount;
+		shown = lineCount;
 	}
-	size_t blank = kLineCount - shown;
+	size_t blank = lineCount - shown;
 
-	for (size_t i = 0; i < kLineCount; i++)
+	for (size_t i = 0; i < kMaxLineCount; i++)
 	{
 		const Line* line = nullptr;
-		if (i >= blank)
+		if (i >= blank && i < lineCount)
 		{
 			size_t index = end - shown + i - blank;
 			if (index < lines.size())
@@ -1884,9 +2163,10 @@ void ChatPanel::ShowInput()
 	}
 
 	std::wstring shown = input;
-	if (Text::EstimateWidth(shown + L"|") > kInputWidth)
+	int32_t width = kInputWidth + extraWidth;
+	if (Text::EstimateWidth(shown + L"|") > width)
 	{
-		while (!shown.empty() && Text::EstimateWidth(L"..." + shown + L"|") > kInputWidth)
+		while (!shown.empty() && Text::EstimateWidth(L"..." + shown + L"|") > width)
 		{
 			shown.erase(0, 1);
 		}
@@ -1904,7 +2184,7 @@ void ChatPanel::ShowTitle()
 	}
 	else
 	{
-		SetText(kTitleID, Text::ShortenToWidth(serverName, kTitleWidth, kTitleFontScale));
+		SetText(kTitleID, Text::ShortenToWidth(serverName, kTitleWidth + extraWidth, kTitleFontScale));
 	}
 
 	std::string count = std::to_string(unread);

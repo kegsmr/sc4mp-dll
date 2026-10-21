@@ -9,6 +9,7 @@ redistributed. Only what the game has no image for is drawn here, in the game's 
 
 Backgrounds are drawn at the exact size of their window in ui/ChatPanel.ui, so they look the same however the game
 blits them. Button images are strips of four frames, like the game's: disabled, normal, pressed and hover.
+The text field gets wider with the panel, so the game stretches its image as an edge image, keeping its rounded ends.
 
 The round button's globe is the exception: it's cut out of the game's globe-with-arrows icon {46a006b0,14416310}, since the
 game can't crop or scale a button's image. Pass that image (a PNG exported from SimCity_1.dat) to draw it again; without
