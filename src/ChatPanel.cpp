@@ -17,6 +17,7 @@
 #include "SC4UI.h"
 
 #include <vector>
+#include <windowsx.h>
 
 // A random ID, which must not be used by any other plugin
 static constexpr uint32_t kChatPanelServiceID = 0x7B3E9A5F;
@@ -50,6 +51,9 @@ static constexpr int32_t kChipHeight = 26;
 static constexpr int32_t kChipRightMargin = 12;
 static constexpr int32_t kChipBottomMargin = 48;	// above the city view's news ticker
 
+// The panel's buttons, of which only the shown ones can be clicked
+static constexpr uint32_t kButtonIDs[] = { kMinimizeButtonID, kHideButtonID, kShowButtonID, kChatButtonID, kChipID };
+
 // Windows in the title bar, shown unless the panel is minimized
 static constexpr uint32_t kTitleBarIDs[] = { kTitleID, kStatusPillID, kStatusTextID, kMinimizeButtonID };
 
@@ -82,6 +86,7 @@ static constexpr int32_t kCollapsedHeight = 42;		// just the title bar (and its 
 static constexpr uint32_t kGZWinMessageCommand = 3;
 static constexpr uint32_t kGZWinCommandButtonClicked = 0x287259F6;
 static constexpr LPARAM kKeyRepeatFlag = 1 << 30;
+static constexpr int kMaxWinDepth = 32;	// in case a window's parent chain loops
 
 static const char* const kTitle = "SC4MP Chat";
 static const char* const kInputHint = "Press Enter to chat";
@@ -215,6 +220,7 @@ void ChatPanel::Attach(cIGZWin* pNewParent)
 	// Kept, so the panel can be removed from it even after the game starts tearing the view down
 	pParent = pNewParent;
 	pParent->AddRef();
+	loggedCoveredClick = false;
 
 	pWin = pNewWin;
 	pParent->ChildAdd(pWin);
@@ -254,6 +260,7 @@ void ChatPanel::Detach()
 {
 	typing = false;
 	input.clear();
+	buttonsDown = 0;
 
 	if (pWin)
 	{
@@ -407,7 +414,18 @@ bool ChatPanel::DoWinProcMessage(cIGZWin* pSender, cGZMessage& msg)
 		return false;
 	}
 
-	switch (msg.dwData2)	// the button's ID
+	return Click(msg.dwData2);	// the button's ID
+}
+
+bool ChatPanel::DoWinMsg(cIGZWin* pSender, uint32_t dwMessageID, uint32_t data1, uint32_t data2, uint32_t data3)
+{
+	return false;
+}
+
+// Does what the button does. Called for the game's button clicks, and for the clicks FilterMessage keeps from the game.
+bool ChatPanel::Click(uint32_t buttonID)
+{
+	switch (buttonID)
 	{
 	case kHideButtonID:
 	case kShowButtonID:
@@ -442,11 +460,6 @@ bool ChatPanel::DoWinProcMessage(cIGZWin* pSender, cGZMessage& msg)
 	return false;
 }
 
-bool ChatPanel::DoWinMsg(cIGZWin* pSender, uint32_t dwMessageID, uint32_t data1, uint32_t data2, uint32_t data3)
-{
-	return false;
-}
-
 LRESULT ChatPanel::FilterMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, bool& handled)
 {
 	handled = false;
@@ -456,14 +469,179 @@ LRESULT ChatPanel::FilterMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 		return 0;	// no panel in this view
 	}
 
-	if (typing)
+	if (uMsg >= WM_MOUSEFIRST && uMsg <= WM_MOUSELAST)
+	{
+		handled = HandleMouse(hWnd, uMsg, lParam);
+	}
+	else if (typing)
 	{
 		handled = HandleTypingKey(hWnd, uMsg, wParam, lParam);
 	}
-	else if (uMsg == WM_KEYDOWN && wParam == VK_RETURN && (lParam & kKeyRepeatFlag) == 0 && !GameWantsEnter())
+	else if (uMsg == WM_KEYDOWN && wParam == VK_RETURN && (lParam & kKeyRepeatFlag) == 0)
 	{
-		StartTyping();
-		handled = true;
+		if (GameWantsEnter())
+		{
+			Log::Line("Enter was left to the game, since one of its dialogs or text boxes has it");
+		}
+		else
+		{
+			StartTyping();
+			handled = true;
+		}
+	}
+
+	return 0;
+}
+
+// The views pick the region tile or city lot under the cursor from the game window's own mouse messages,
+// whichever window the game's window manager then gives them to, so a click on the panel also clicked the map.
+// So the mouse buttons on the panel are taken here, before the game sees them, and the panel does the clicked button itself.
+bool ChatPanel::HandleMouse(HWND hWnd, UINT uMsg, LPARAM lParam)
+{
+	POINT point{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+	uint32_t button = 0;
+	bool down = false;
+
+	switch (uMsg)
+	{
+	case WM_LBUTTONDOWN:
+	case WM_LBUTTONDBLCLK:
+		button = MK_LBUTTON;
+		down = true;
+		break;
+	case WM_RBUTTONDOWN:
+	case WM_RBUTTONDBLCLK:
+		button = MK_RBUTTON;
+		down = true;
+		break;
+	case WM_MBUTTONDOWN:
+	case WM_MBUTTONDBLCLK:
+		button = MK_MBUTTON;
+		down = true;
+		break;
+	case WM_LBUTTONUP:
+		button = MK_LBUTTON;
+		break;
+	case WM_RBUTTONUP:
+		button = MK_RBUTTON;
+		break;
+	case WM_MBUTTONUP:
+		button = MK_MBUTTON;
+		break;
+	case WM_MOUSEWHEEL:
+	case WM_MOUSEHWHEEL:
+		// So the wheel doesn't zoom the map under the panel. Its position is on the screen, unlike the buttons'.
+		return ScreenToClient(hWnd, &point) && IsOnPanel(point.x, point.y);
+	default:
+		return false;	// moving is left to the game, which shows the buttons' tooltips and hover art
+	}
+
+	if (!down)
+	{
+		// The release goes where the press went, even if the panel has moved since (eg. the chip opened it),
+		// so neither the game nor the panel gets half a click
+		bool pressedOnPanel = (buttonsDown & button) != 0;
+		buttonsDown &= ~button;
+		return pressedOnPanel;
+	}
+
+	if (!IsOnPanel(point.x, point.y))
+	{
+		return false;
+	}
+
+	buttonsDown |= button;
+
+	// Done on the press rather than the release, so there's no pressed button to keep track of
+	if (button == MK_LBUTTON)
+	{
+		Click(GetButtonAt(point.x, point.y));
+	}
+
+	return true;
+}
+
+// Whether a point in the game window (where the mouse messages are) is on the panel, and the panel is on top there
+bool ChatPanel::IsOnPanel(int32_t x, int32_t y)
+{
+	cIGZWinMgrPtr pWinMgr;
+	if (pWinMgr && pWinMgr->IsModal())
+	{
+		return false;	// a dialog has the mouse
+	}
+
+	int32_t left = 0;
+	int32_t top = 0;
+	GetPanelOrigin(left, top);
+	if (x < left || y < top || x >= left + pWin->GetW() || y >= top + pWin->GetH())
+	{
+		return false;
+	}
+
+	// Another of the game's windows may be over the panel, eg. a query window dragged there, and it keeps its clicks.
+	// If the window manager can't say, the panel takes the click.
+	cIGZWin* pHit = nullptr;
+	if (pWinMgr)
+	{
+		pHit = pWinMgr->GetWindowFromPoint(x, y);
+	}
+
+	if (!pHit)
+	{
+		return true;
+	}
+
+	for (int depth = 0; pHit && depth < kMaxWinDepth; depth++)
+	{
+		if (pHit == pWin)
+		{
+			return true;
+		}
+		pHit = pHit->GetParentWin();
+	}
+
+	// Logged once, since it also happens if the window manager's coordinates aren't the game window's
+	if (!loggedCoveredClick)
+	{
+		Log::Line("A click on the chat panel went to another of the game's windows over it");
+		loggedCoveredClick = true;
+	}
+
+	return false;
+}
+
+// Where the panel is in the game window. Its own place is in its view's window, which is in its parent's, and so on.
+void ChatPanel::GetPanelOrigin(int32_t& left, int32_t& top) const
+{
+	left = 0;
+	top = 0;
+
+	cIGZWin* pCurrent = pWin;
+	for (int depth = 0; pCurrent && depth < kMaxWinDepth; depth++)
+	{
+		left += pCurrent->GetL();
+		top += pCurrent->GetT();
+		pCurrent = pCurrent->GetParentWin();
+	}
+}
+
+// Returns the ID of the shown button at a point in the game window, or 0 if there's none
+uint32_t ChatPanel::GetButtonAt(int32_t x, int32_t y) const
+{
+	int32_t left = 0;
+	int32_t top = 0;
+	GetPanelOrigin(left, top);
+	x -= left;
+	y -= top;
+
+	for (uint32_t id : kButtonIDs)
+	{
+		cIGZWin* pButton = pWin->GetChildWindowFromID(id);
+		if (pButton && pButton->IsVisible()
+			&& x >= pButton->GetL() && y >= pButton->GetT() && x < pButton->GetL() + pButton->GetW() && y < pButton->GetT() + pButton->GetH())
+		{
+			return id;
+		}
 	}
 
 	return 0;
