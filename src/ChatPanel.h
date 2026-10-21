@@ -123,7 +123,7 @@ private:
 	void AddLine(const Notice& notice);
 	void WrapNotice(const Notice& notice);
 	void Rewrap();
-	size_t GetLineLength() const;
+	int32_t GetLineWidth() const;
 	void ShowLine(uint32_t row, const Line* line, bool open);
 	void SetMinimized(bool value);
 	void Layout();
