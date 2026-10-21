@@ -29,7 +29,7 @@ public:
 
 	// Called on the bridge thread with each line the launcher sends to show in game (chat, save results and alerts).
 	// `history` is true for the recent lines the launcher sends when the game connects. Chat comes with the player's `name`
-	// and the launcher's `color` for it (eg. "[46,125,50]"), which are empty for other lines. Set it before Start().
+	// and the launcher's `color` for it (eg. "[46,125,50]"). Other lines have no name, and save results have a color too. Set it before Start().
 	using NotifyHandler = std::function<void(const std::string& text, bool history, const std::string& name, const std::string& color, bool own)>;
 	void SetNotifyHandler(NotifyHandler handler);
 
@@ -38,6 +38,11 @@ public:
 	using ServerHandler = std::function<void(const std::string& name)>;
 	void SetStatusHandler(StatusHandler handler);
 	void SetServerHandler(ServerHandler handler);
+
+	// Called on the bridge thread with how far the launcher's save push is (eg. "Saving... (120/3,456KB)"), or an empty
+	// `text` when it's over. Set it before Start().
+	using ProgressHandler = std::function<void(const std::string& text)>;
+	void SetProgressHandler(ProgressHandler handler);
 
 	// Called on the bridge thread when the launcher says the city saved at `path` belongs to another mayor (`owner`). Set it before Start().
 	using GuardHandler = std::function<void(const std::string& owner, const std::string& city, const std::string& path)>;
@@ -80,6 +85,7 @@ private:
 	NotifyHandler notifyHandler;
 	StatusHandler statusHandler;
 	ServerHandler serverHandler;
+	ProgressHandler progressHandler;
 	GuardHandler guardHandler;
 	ClaimHandler claimHandler;
 	TakeoverHandler takeoverHandler;

@@ -10,9 +10,14 @@ redistributed. Only what the game has no image for is drawn here, in the game's 
 Backgrounds are drawn at the exact size of their window in ui/ChatPanel.ui, so they look the same however the game
 blits them. Button images are strips of four frames, like the game's: disabled, normal, pressed and hover.
 
-Usage: python tools/make-ui-images.py   (needs Pillow: pip install pillow)
+The round button's globe is the exception: it's cut out of the game's globe-with-arrows icon {46a006b0,14416310}, since the
+game can't crop or scale a button's image. Pass that image (a PNG exported from SimCity_1.dat) to draw it again; without
+it, the committed chat-globe.png is kept.
+
+Usage: python tools/make-ui-images.py [14416310.png]   (needs Pillow: pip install pillow)
 """
 
+import sys
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter
@@ -36,6 +41,7 @@ INDIGO = (60, 70, 190)
 # The layout, which must match ui/ChatPanel.ui
 FIELD_SIZE = (290, 26)
 CHIP_BUTTON_SIZE = 50
+GLOBE_SIZE = 28
 HINT_SIZE = (84, 18)
 STATUS_SIZE = 14
 TITLE_BUTTON_SIZE = (22, 20)	# like the game's
@@ -84,7 +90,7 @@ def finish(image):
 def draw_round_button():
 	"""Draws the minimized panel's round button in four frames, at 50 pixels, in the style of the game's round buttons (eg.
 	{46a006b0,cbcb6e9b}, which is 88 pixels and can't be scaled in game): a navy disc in a silver ring, with a soft shadow.
-	The status ring, the speech bubble and the unread count are windows on top."""
+	The status ring, the globe and the unread count are windows on top."""
 
 	size = CHIP_BUTTON_SIZE
 	discs = {"disabled": ((120, 124, 134), (96, 100, 110)), "normal": ((84, 104, 160), (58, 74, 119)), "pressed": ((58, 74, 119), (70, 89, 143)), "hover": ((104, 126, 186), (70, 89, 143))}
@@ -130,6 +136,37 @@ def draw_ring(colour):
 	image = Image.new("RGBA", (size * SCALE, size * SCALE))
 	ImageDraw.Draw(image).ellipse(scaled(5, 5, size - 7, size - 7), outline=colour + (255,), width=3 * SCALE)
 	return finish(image)
+
+
+def draw_globe(path):
+	"""Cuts the wireframe globe out of the game's globe-with-arrows icon, a strip of four 84 pixel frames, clipped to a
+	circle so the arrows and tiles around it are left out, and scaled to the round button's face, in the same four frames."""
+
+	source = Image.open(path).convert("RGBA")
+	frame_width = source.width // len(STATES)
+
+	# The globe's bounds, found in the normal frame and used for all of them, so the frames line up
+	globe = source.crop((frame_width + 26, 12, frame_width + 61, 49))
+	left, top, right, bottom = globe.getbbox()
+	left += frame_width + 26
+	right += frame_width + 26
+	top += 12
+	bottom += 12
+	width = right - left
+	height = bottom - top
+
+	mask = Image.new("L", (width * SCALE, height * SCALE), 0)
+	ImageDraw.Draw(mask).ellipse((0, 0, width * SCALE - 1, height * SCALE - 1), fill=255)
+	mask = mask.resize((width, height), Image.LANCZOS)
+
+	strip = Image.new("RGBA", (GLOBE_SIZE * len(STATES), GLOBE_SIZE))
+	for i in range(len(STATES)):
+		offset = (i - 1) * frame_width
+		frame = source.crop((left + offset, top, right + offset, bottom))
+		alpha = Image.composite(frame.split()[3], Image.new("L", mask.size, 0), mask)
+		frame.putalpha(alpha)
+		strip.paste(frame.resize((GLOBE_SIZE, GLOBE_SIZE), Image.LANCZOS), (i * GLOBE_SIZE, 0))
+	return strip
 
 
 def draw_count_bubble():
@@ -275,7 +312,11 @@ def main():
 	output = Path(__file__).resolve().parent.parent / "ui" / "images"
 	output.mkdir(exist_ok=True)
 
-	for name, image in make_images().items():
+	images = make_images()
+	if len(sys.argv) > 1:
+		images["chat-globe.png"] = draw_globe(sys.argv[1])
+
+	for name, image in images.items():
 		image.save(output / name, optimize=True)
 		print(f"Wrote {output / name} ({image.width}x{image.height})")
 

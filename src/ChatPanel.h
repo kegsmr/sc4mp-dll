@@ -1,4 +1,5 @@
 #pragma once
+#include "GZWinInterfaces.h"
 #include "cIGZWinProc.h"
 #include "cIGZWinProcFilterW32.h"
 #include "cRZBaseSystemService.h"
@@ -23,15 +24,17 @@ class cIGZWin;
 // Only Post() may be called from another thread: it queues the line, and the queue is emptied every
 // frame on the game thread (OnTick), since the game's windows must only be used there.
 // The mouse comes to the panel's window proc (DoWinProcMessage) from the game, which keeps what the panel handles from
-// the map under it. Keys come from the game window's own Win32 messages (FilterMessage), which also run on the game thread.
-class ChatPanel final : public cRZBaseSystemService, private cIGZWinProc, private cIGZWinProcFilterW32
+// the map under it. So do the keys while the player types, since the panel has the game's focus then. Enter, which opens
+// the chat, is seen first by the game's key filter (DoMessage). The game window's own Win32 messages (FilterMessage) are
+// only watched for the game's "City Saved." message box. All of these run on the game thread.
+class ChatPanel final : public cRZBaseSystemService, private cIGZWinProc, private cIGZWinMessageFilter, private cIGZWinProcFilterW32
 {
 public:
 	using SendFunction = std::function<void(const std::string&)>;
 
 	ChatPanel();
 
-	// Starts updating every frame and listening for keys. The functions are called on the game thread.
+	// Starts updating every frame. The functions are called on the game thread.
 	void Start(SendFunction sendChat, SendFunction sendCommand);
 	void Stop();
 
@@ -43,7 +46,8 @@ public:
 	void StartTyping();
 
 	// Adds a line from the launcher. Safe to call from any thread. History lines (sent on connecting) don't count as unread.
-	// Chat comes with the player's name, which starts the text, and the launcher's color for it (eg. "[46,125,50]"). Other lines are shown in grey.
+	// Chat comes with the player's name, which starts the text, and the launcher's color for it (eg. "[46,125,50]"). Other lines are shown in grey,
+	// or in green or red if the launcher gives them a color (save results).
 	void Post(const std::string& text, bool history, const std::string& name = std::string(), const std::string& color = std::string(), bool own = false);
 
 	// Closes the game's "City Saved." message box if it shows within a few seconds, since a city isn't really saved
@@ -57,6 +61,10 @@ public:
 	void PostStatus(const std::string& state, const std::string& text);
 	void PostServerName(const std::string& name);
 
+	// Shows how far a save push is (eg. "Saving... (120/3,456KB)") as the last line, replacing the one before, until an empty
+	// `text` clears it. It isn't kept in the chat or counted as new. Safe to call from any thread.
+	void PostProgress(const std::string& text);
+
 	bool QueryInterface(uint32_t riid, void** ppvObj) override;
 	uint32_t AddRef() override;
 	uint32_t Release() override;
@@ -68,12 +76,12 @@ public:
 private:
 	bool DoWinProcMessage(cIGZWin* pWin, cGZMessage& msg) override;
 	bool DoWinMsg(cIGZWin* pWin, uint32_t dwMessageID, uint32_t data1, uint32_t data2, uint32_t data3) override;
+	bool DoMessage(cIGZWin* pWin, cGZMessage& msg) override;
 	LRESULT FilterMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, bool& handled) override;
 
 	bool Click(uint32_t buttonID);
 	void Press(int32_t x, int32_t y);
 	void Wheel(const cGZMessage& msg);
-	bool IsOnPanel(int32_t x, int32_t y) const;
 	void GetPanelOrigin(int32_t& left, int32_t& top) const;
 	uint32_t GetButtonAt(int32_t x, int32_t y) const;
 	bool IsOnChild(uint32_t id, int32_t x, int32_t y) const;
@@ -85,12 +93,15 @@ private:
 	void Drag(int32_t x, int32_t y);
 	void StopDragging();
 	void ClampToView(int32_t& left, int32_t& top) const;
-	bool HandleTypingKey(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+	bool HandleKey(const cGZMessage& msg);
+	void TypeCharacter(uint32_t code);
 	void Type(wchar_t c);
-	void Paste(HWND hWnd);
+	void Paste();
 	void Send();
 	void StopTyping();
 	void PauseTyping();
+	void TakeFocus();
+	void ReleaseFocus();
 	bool GameWantsEnter() const;
 
 	struct Notice
@@ -109,6 +120,7 @@ private:
 		std::string name;
 		int color = -1;		// in kNameColors
 		bool chat = false;	// shown in navy, or in grey if not
+		int resultColor = -1;	// in kResultColors, for a save result that isn't shown in grey
 	};
 
 	void AddLine(const Notice& notice);
@@ -123,6 +135,7 @@ private:
 	void SetText(uint32_t id, const std::string& text);
 	void SetTip(uint32_t id, const std::string& text);
 	void ShowChipTip();
+	size_t GetRowCount() const;
 	size_t GetMaxScroll() const;
 	void ScrollBy(int rows);
 	void ScrollToBottom();
@@ -141,11 +154,13 @@ private:
 	void AvoidCoveringWindows();
 	void SetChildVisible(uint32_t id, bool visible);
 	bool SetKeyFilter(bool add);
+	bool SetCanvasFilter(bool add);
 
 	SendFunction sendChat;
 	SendFunction sendCommand;
 	bool started = false;
 	bool keyFilterAdded = false;
+	bool canvasFilterAdded = false;
 
 	cIGZWin* pParent = nullptr;
 	cIGZWin* pWin = nullptr;	// the panel, while it's shown in a view
@@ -168,6 +183,8 @@ private:
 	int32_t dragX = 0;	// where the panel was grabbed, from its top left corner
 	int32_t dragY = 0;
 	bool loggedWheel = false;	// the wheel's first message is logged, since what it holds isn't sure
+	bool loggedCharacter = false;	// and so are the first character and key press on the panel
+	bool loggedKeyDown = false;
 	ULONGLONG savedDialogDeadline = 0;	// until when the game's "City Saved." is looked for, after a save
 	ULONGLONG lastSavedDialogCheck = 0;
 	HWND gameWindow = nullptr;	// the game's window, from the messages it gets
@@ -176,13 +193,19 @@ private:
 	std::deque<Notice> inbox;	// lines from the bridge thread, waiting for the next frame
 	std::optional<std::pair<std::string, std::string>> pendingStatus;
 	std::optional<std::string> pendingServerName;
+	std::optional<std::string> pendingProgress;
 
 	std::deque<Line> lines;	// the last kMaxLines rows, oldest first
+	std::string progress;	// the save push's progress, shown after the lines while it isn't empty
 	size_t scrollRows = 0;	// how far the player has scrolled up from the newest row
 	int32_t scrollbarValue = 0;	// the game's scrollbar's value, as last set, to see when the player moves it
 	size_t newBelow = 0;	// messages that came while scrolled up
 	std::wstring input;
 	bool typing = false;
+	bool hasFocus = false;	// the panel took the game's focus to type, and hasn't lost it
+	cIGZWin* pPreviousFocus = nullptr;	// what had the focus before, to give it back to (only used while the game says it's valid)
+	cGZMessage* filteredKey = nullptr;	// the key message the key filter just typed, if the game sends it on to the panel too
+	bool enterDown = false;	// Enter is held, so its repeats don't open the chat again
 	bool caretShown = true;	// the blinking caret, while typing
 	ULONGLONG caretTime = 0;
 	bool minimized = true;	// only a small button in the bottom right corner is shown, as when the game starts
