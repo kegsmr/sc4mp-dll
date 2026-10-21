@@ -876,19 +876,22 @@ void ChatPanel::PressScrollbar(int32_t y, bool press)
 // Sets the game's scrollbar to the shown lines, and the hint for new lines below them
 void ChatPanel::ShowScroll(bool open)
 {
-	// Like a Windows scrollbar: the range is every row, the page is the rows shown, and the value is the top row shown.
-	// So the thumb is at the bottom for the newest lines, and fills the track while they all fit.
+	// The game's scrollbar puts its (fixed size) thumb at the value's place between the minimum and the maximum, so the
+	// range is the top rows that can be shown, and the value is the top row shown. While all the rows fit, the thumb is
+	// at the bottom, with the newest lines.
 	cRZAutoRefCount<cIGZWinScrollbar> pScrollbar;
 	if (pWin->GetChildAs(kScrollbarID, kGZIID_cIGZWinScrollbar, pScrollbar.AsPPVoid()))
 	{
-		int32_t rows = static_cast<int32_t>(lines.size());
-		if (rows < static_cast<int32_t>(kLineCount))
+		int32_t maxScroll = static_cast<int32_t>(GetMaxScroll());
+		int32_t value = maxScroll - static_cast<int32_t>(scrollRows);
+		if (maxScroll == 0)
 		{
-			rows = static_cast<int32_t>(kLineCount);
+			maxScroll = 1;
+			value = 1;
 		}
-		pScrollbar->SetMinMax(0, rows - 1);
+		pScrollbar->SetMinMax(0, maxScroll);
 		pScrollbar->SetPageSize(static_cast<int32_t>(kLineCount));
-		pScrollbar->SetValue(static_cast<int32_t>(GetMaxScroll() - scrollRows));
+		pScrollbar->SetValue(value);
 	}
 	SetChildVisible(kScrollbarID, open);
 
@@ -1323,13 +1326,18 @@ void ChatPanel::Paste(HWND hWnd)
 void ChatPanel::Send()
 {
 	std::string text = Trim(Text::WideToUtf8(input));
-	StopTyping();
-	ScrollToBottom();	// to see it arrive
 
+	// Enter on an empty field goes back to the game, so Enter, Enter does
 	if (text.empty())
 	{
+		StopTyping();
 		return;
 	}
+
+	// The player keeps typing, since chat often comes in a few messages in a row
+	input.clear();
+	ShowInput();
+	ScrollToBottom();	// to see it arrive
 
 	// "/status" runs a launcher command, like the `sc4mp status` cheat code
 	if (text[0] == '/')
