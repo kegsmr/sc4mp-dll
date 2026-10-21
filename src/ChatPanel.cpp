@@ -406,6 +406,7 @@ void ChatPanel::StartTyping()
 	}
 
 	typing = true;
+	ResetCaret();
 	ShowInput();
 }
 
@@ -499,6 +500,14 @@ bool ChatPanel::OnTick(uint32_t unknown1)
 	AvoidCoveringWindows();
 
 	CheckSavedDialog(false);
+
+	// The caret blinks like Windows' own
+	if (typing && GetTickCount64() - caretTime >= GetCaretBlinkTime())
+	{
+		caretShown = !caretShown;
+		caretTime = GetTickCount64();
+		ShowInput();
+	}
 
 	if (!received.empty())
 	{
@@ -1032,6 +1041,13 @@ static void GetWindowOrigin(cIGZWin* pWindow, int32_t& left, int32_t& top)
 	}
 }
 
+// Shows the caret, and starts its blink again, so it doesn't blink away while the player types
+void ChatPanel::ResetCaret()
+{
+	caretShown = true;
+	caretTime = GetTickCount64();
+}
+
 void ChatPanel::HideSavedDialog()
 {
 	savedDialogDeadline = GetTickCount64() + kSavedDialogWait;
@@ -1268,6 +1284,8 @@ bool ChatPanel::HandleTypingKey(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
 void ChatPanel::Type(wchar_t c)
 {
+	ResetCaret();
+
 	if (c == L'\b')
 	{
 		if (!input.empty())
@@ -1716,17 +1734,18 @@ void ChatPanel::ShowInput()
 		return;
 	}
 
-	// The caret shows while typing. Text kept from a click outside the panel is shown without it.
+	// A blinking line shows where the player types, but not for text kept from a click outside the panel. The text is
+	// shortened to fit with it either way, so it doesn't jump when it blinks.
 	std::wstring caret;
-	if (typing)
+	if (typing && caretShown)
 	{
-		caret = L"_";
+		caret = L"|";
 	}
 
 	std::wstring shown = input;
-	if (Text::EstimateWidth(shown + caret) > kInputWidth)
+	if (Text::EstimateWidth(shown + L"|") > kInputWidth)
 	{
-		while (!shown.empty() && Text::EstimateWidth(L"..." + shown + caret) > kInputWidth)
+		while (!shown.empty() && Text::EstimateWidth(L"..." + shown + L"|") > kInputWidth)
 		{
 			shown.erase(0, 1);
 		}

@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <deque>
 #include <mutex>
 #include <vector>
 #include <optional>
@@ -40,6 +41,10 @@ public:
 	// comes before the game's own prompts (eg. to reconcile the edges). Called on the game thread.
 	void CityOpened(const std::string& path);
 
+	// Shows one of the launcher's alerts (eg. "Save push failed! City already claimed.") in a dialog like the warning's,
+	// one at a time. Safe to call from any thread.
+	void PostAlert(const std::string& title, const std::string& text);
+
 	// Removes the warning, eg. when the city closes
 	void Detach();
 
@@ -57,6 +62,11 @@ private:
 		std::string owner;
 		std::string city;
 		std::string path;
+
+		// Or one of the launcher's alerts (eg. a save that failed), shown in the same kind of dialog with an OK button
+		bool alert = false;
+		std::string title;
+		std::string text;
 	};
 
 	bool DoWinProcMessage(cIGZWin* pWin, cGZMessage& msg) override;
@@ -97,6 +107,8 @@ private:
 
 	std::mutex inboxMutex;
 	std::optional<Warning> pendingWarning;
+	std::deque<Warning> alerts;	// waiting to be shown, one at a time
+	std::optional<Warning> shownAlert;	// the alert shown, if any
 	std::vector<Warning> claims;	// the launcher's list of cities that belong to other mayors
 
 	std::string warnedPath;	// the open city's savegame, if it was warned about, so the launcher's own check doesn't warn again

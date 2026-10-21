@@ -94,6 +94,11 @@ void Bridge::SetGuardHandler(GuardHandler handler)
 	guardHandler = std::move(handler);
 }
 
+void Bridge::SetAlertHandler(AlertHandler handler)
+{
+	alertHandler = std::move(handler);
+}
+
 bool Bridge::IsConnected() const
 {
 	return connected;
@@ -306,12 +311,24 @@ void Bridge::HandleLine(const std::string& line)
 			notifyHandler(text, false, std::string(), std::string(), false);
 		}
 
-		// Shown on its own thread, so neither the game nor the bridge waits for the player to close it
-		std::wstring wideText = Text::Utf8ToWide(text);
-		std::thread([wideText]()
+		// Shown in a dialog like the game's. Older launchers send no title, so a failed save's is made from its text.
+		std::string title = message["title"];
+		std::string body = text;
+		const std::string failedSave = "Save push failed! ";
+		if (title.empty() && body.compare(0, failedSave.size(), failedSave) == 0)
 		{
-			MessageBoxW(nullptr, wideText.c_str(), L"SC4MP", MB_OK | MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND);
-		}).detach();
+			title = "Save failed";
+			body = body.substr(failedSave.size());
+		}
+		if (title.empty())
+		{
+			title = "SC4MP";
+		}
+
+		if (alertHandler)
+		{
+			alertHandler(title, body);
+		}
 	}
 	else if (type == "status")
 	{

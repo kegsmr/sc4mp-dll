@@ -301,7 +301,7 @@ def make_images():
 		"status-failed.png": draw_status(RED, "cross"),
 		"status-not-saved.png": draw_status(AMBER, "bang"),
 		"status-connected.png": draw_status(GREEN, "dot"),
-		"status-disconnected.png": draw_status(GREY, "dash"),
+		"status-disconnected.png": draw_status(AMBER, "dash"),	# amber like a save that can't reach the server
 		"status-guest.png": draw_status(INDIGO, "person"),
 		"tile-you.png": draw_tile(TILE_YOU, "you"),
 		"tile-claimed.png": draw_tile(TILE_CLAIMED, "claimed"),

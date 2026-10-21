@@ -15,6 +15,7 @@ from pathlib import Path
 UI_FILES = {
 	"ChatPanel.ui": (0xC0E6A1C5, 0x1A9F3B21),
 	"GuardDialog.ui": (0xC0E6A1C5, 0x5D2C7E43),
+	"AlertDialog.ui": (0xC0E6A1C5, 0x5D2C7E44),
 }
 
 UI_TYPE = 0x00000000

@@ -115,6 +115,7 @@ public:
 		bridge.SetStatusHandler([this](const std::string& state, const std::string& text) { chat.PostStatus(state, text); });
 		bridge.SetServerHandler([this](const std::string& name) { chat.PostServerName(name); });
 		bridge.SetGuardHandler([this](const std::string& owner, const std::string& city, const std::string& path) { guard.Post(owner, city, path); });
+		bridge.SetAlertHandler([this](const std::string& title, const std::string& text) { guard.PostAlert(title, text); });
 		bridge.SetClaimHandler([this](bool reset, const std::string& owner, const std::string& city, const std::string& path) { guard.PostClaim(reset, owner, city, path); });
 
 		// In single player, only log what happens
@@ -130,7 +131,16 @@ public:
 			[this](const std::string& text) { SendChat(text); },
 			[this](const std::string& command) { SendCommand(command); });
 
-		guard.Start([]() { return GetSC4AppChild(kGZWin_SC4View3DWin); });
+		// The city's view, or the region's for alerts that come after leaving the city (eg. a failed save)
+		guard.Start([]()
+		{
+			cIGZWin* pView = GetSC4AppChild(kGZWin_SC4View3DWin);
+			if (pView && pView->IsVisible())
+			{
+				return pView;
+			}
+			return GetSC4AppChild(kGZWin_SC4WinRegionScreen);
+		});
 
 		return true;
 	}

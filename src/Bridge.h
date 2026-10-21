@@ -43,6 +43,10 @@ public:
 	using GuardHandler = std::function<void(const std::string& owner, const std::string& city, const std::string& path)>;
 	void SetGuardHandler(GuardHandler handler);
 
+	// Called on the bridge thread with the launcher's alerts (eg. a save the server didn't take), to show them. Set it before Start().
+	using AlertHandler = std::function<void(const std::string& title, const std::string& text)>;
+	void SetAlertHandler(AlertHandler handler);
+
 	// Called on the bridge thread for the launcher's list of cities that belong to other mayors: once with `reset`, then
 	// once for each city. Set it before Start().
 	using ClaimHandler = std::function<void(bool reset, const std::string& owner, const std::string& city, const std::string& path)>;
@@ -73,6 +77,7 @@ private:
 	ServerHandler serverHandler;
 	GuardHandler guardHandler;
 	ClaimHandler claimHandler;
+	AlertHandler alertHandler;
 
 	std::mutex mutex;
 	std::condition_variable stopped;

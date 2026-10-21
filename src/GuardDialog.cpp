@@ -29,6 +29,9 @@ static constexpr uint32_t kGuardDialogServiceID = 0x7B3E9AC0;
 // The UI script in ui/GuardDialog.ui (packed into sc4mp-dll-ui.dat by tools/make-ui-dat.py) and its window IDs
 static constexpr uint32_t kDialogGroup = 0xC0E6A1C5;
 static constexpr uint32_t kDialogInstance = 0x5D2C7E43;
+static constexpr uint32_t kAlertInstance = 0x5D2C7E44;	// ui/AlertDialog.ui: the same dialog with one OK button, for the launcher's alerts
+static constexpr uint32_t kTitleID = 0x7B3E9AC3;
+static constexpr size_t kMaxAlerts = 3;	// a few failures in a row are shown one after another, not piled up
 static constexpr uint32_t kDialogID = 0x7B3E9AC1;
 static constexpr uint32_t kSignID = 0x7B3E9ACA;
 static constexpr uint32_t kBackButtonID = 0x7B3E9AC7;
@@ -161,6 +164,29 @@ void GuardDialog::Post(const std::string& owner, const std::string& city, const 
 	pendingWarning = warning;
 }
 
+void GuardDialog::PostAlert(const std::string& title, const std::string& text)
+{
+	std::lock_guard<std::mutex> lock(inboxMutex);
+
+	for (const Warning& queued : alerts)
+	{
+		if (queued.text == text)
+		{
+			return;	// already waiting
+		}
+	}
+	if (alerts.size() >= kMaxAlerts)
+	{
+		alerts.pop_front();
+	}
+
+	Warning alert;
+	alert.alert = true;
+	alert.title = title;
+	alert.text = text;
+	alerts.push_back(alert);
+}
+
 void GuardDialog::PostClaim(bool reset, const std::string& owner, const std::string& city, const std::string& path)
 {
 	std::lock_guard<std::mutex> lock(inboxMutex);
@@ -207,6 +233,13 @@ void GuardDialog::CityOpened(const std::string& path)
 
 void GuardDialog::Detach()
 {
+	// An alert the player hasn't closed (eg. when leaving the city) comes back in the next view
+	if (shownAlert && !closeRequested)
+	{
+		std::lock_guard<std::mutex> lock(inboxMutex);
+		alerts.push_front(*shownAlert);
+	}
+	shownAlert.reset();
 	closeRequested = false;
 	waitingForGame = false;
 	StopDragging();
@@ -329,6 +362,24 @@ bool GuardDialog::OnTick(uint32_t unknown1)
 		Log::Line("Showing the claimed city warning after the game's prompt");
 	}
 
+	// The launcher's alerts, one at a time, once nothing else is shown
+	if (!pWin)
+	{
+		std::optional<Warning> alert;
+		{
+			std::lock_guard<std::mutex> lock(inboxMutex);
+			if (!alerts.empty())
+			{
+				alert = alerts.front();
+				alerts.pop_front();
+			}
+		}
+		if (alert)
+		{
+			Show(*alert);
+		}
+	}
+
 	if (warning)
 	{
 		// The player may have left the city (or opened another) before the launcher answered
@@ -351,8 +402,15 @@ bool GuardDialog::OnTick(uint32_t unknown1)
 
 void GuardDialog::Show(const Warning& warning)
 {
-	Detach();
-	warnedPath = warning.path;
+	Detach();	// a warning shown over an alert puts the alert back, to come after it
+	if (warning.alert)
+	{
+		shownAlert = warning;
+	}
+	else
+	{
+		warnedPath = warning.path;
+	}
 
 	cIGZWin* pNewParent = nullptr;
 	if (getParent)
@@ -364,7 +422,12 @@ void GuardDialog::Show(const Warning& warning)
 		return;
 	}
 
-	cGZPersistResourceKey key(0x00000000, kDialogGroup, kDialogInstance);
+	uint32_t instance = kDialogInstance;
+	if (warning.alert)
+	{
+		instance = kAlertInstance;
+	}
+	cGZPersistResourceKey key(0x00000000, kDialogGroup, instance);
 	cIGZWin* pNewWin = nullptr;
 
 	if (!SC4UI::CreateWindowFromScript(key, pNewParent, kDialogID, GZIID_cIGZWin, reinterpret_cast<void**>(&pNewWin)) || !pNewWin)
@@ -391,7 +454,15 @@ void GuardDialog::Show(const Warning& warning)
 		pWinGen->SetWinProc(this);
 	}
 
-	ShowOwner(warning.city + " belongs to " + warning.owner + ".");
+	if (warning.alert)
+	{
+		SetText(kTitleID, warning.title);
+		ShowOwner(warning.text);
+	}
+	else
+	{
+		ShowOwner(warning.city + " belongs to " + warning.owner + ".");
+	}
 
 	// Centered in the view. The pinned gzcom-dll's GZWinMoveTo moves by an offset (see GZWinInterfaces.h).
 	int32_t dx = (pParent->GetW() - pWin->GetW()) / 2 - pWin->GetL();
@@ -417,7 +488,14 @@ void GuardDialog::Show(const Warning& warning)
 		Log::Line("Unable to listen for the mouse, so clicks on the claimed city warning may also reach the map");
 	}
 
-	Log::Line("Showing the claimed city warning: " + warning.city + " belongs to " + warning.owner);
+	if (warning.alert)
+	{
+		Log::Line("Showing the launcher's alert: " + warning.title);
+	}
+	else
+	{
+		Log::Line("Showing the claimed city warning: " + warning.city + " belongs to " + warning.owner);
+	}
 }
 
 bool GuardDialog::DoWinProcMessage(cIGZWin* pSender, cGZMessage& msg)
@@ -693,12 +771,28 @@ uint32_t GuardDialog::GetButtonAt(int32_t x, int32_t y) const
 	return 0;
 }
 
-// Shows "<city> belongs to <owner>." in full, on as many lines as it needs, and grows the dialog to fit. Names are
-// never shortened: the game allows long city names (up to 128 characters), and the line is the player's only way to
-// tell which city it is.
+// Shows the text (the warning's "<city> belongs to <owner>.", or an alert's) in full, on as many lines as it needs, and
+// grows the dialog to fit. Names are never shortened: the game allows long city names (up to 128 characters), and the
+// line is the player's only way to tell which city it is.
 void GuardDialog::ShowOwner(const std::string& text)
 {
-	std::vector<std::wstring> lines = WrapToWidth(Text::Utf8ToWide(text), kLineWidth);
+	// Each of its own lines (an alert can have a few) is wrapped to fit
+	std::vector<std::wstring> lines;
+	std::wstring wide = Text::Utf8ToWide(text);
+	size_t start = 0;
+	while (start <= wide.size())
+	{
+		size_t end = wide.find(L'\n', start);
+		if (end == std::wstring::npos)
+		{
+			end = wide.size();
+		}
+		for (const std::wstring& line : WrapToWidth(wide.substr(start, end - start), kLineWidth))
+		{
+			lines.push_back(line);
+		}
+		start = end + 1;
+	}
 	size_t count = std::size(kOwnerLineIDs);
 
 	// Six lines take any city name the game allows, but just in case, the rest goes on the last line

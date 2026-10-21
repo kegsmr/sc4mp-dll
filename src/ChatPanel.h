@@ -74,6 +74,7 @@ private:
 	uint32_t GetButtonAt(int32_t x, int32_t y) const;
 	bool IsOnChild(uint32_t id, int32_t x, int32_t y) const;
 	void CheckSavedDialog(bool fromMessage);
+	void ResetCaret();
 	void CloseSavedDialog();
 	void StartDragging(HWND hWnd, int32_t x, int32_t y);
 	void Drag(int32_t x, int32_t y);
@@ -178,6 +179,8 @@ private:
 	size_t newBelow = 0;	// messages that came while scrolled up
 	std::wstring input;
 	bool typing = false;
+	bool caretShown = true;	// the blinking caret, while typing
+	ULONGLONG caretTime = 0;
 	bool minimized = true;	// only a small button in the bottom right corner is shown, as when the game starts
 	int unread = 0;
 	std::string serverName;
