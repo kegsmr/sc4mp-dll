@@ -9,8 +9,7 @@ redistributed. Only what the game has no image for is drawn here, in the game's 
 
 Backgrounds are drawn at the exact size of their window in ui/ChatPanel.ui, so they look the same however the game
 blits them. Button images are strips of four frames, like the game's: disabled, normal, pressed and hover.
-The text field gets wider with the panel, so its middle is the same in every column, drawn as wide as the field can get,
-and its rounded ends are images of their own.
+The text field gets wider with the panel, so the game stretches its image as an edge image, keeping its rounded ends.
 
 Usage: python tools/make-ui-images.py   (needs Pillow: pip install pillow)
 """
@@ -37,8 +36,6 @@ INDIGO = (60, 70, 190)
 
 # The layout, which must match ui/ChatPanel.ui
 FIELD_SIZE = (290, 26)
-FIELD_MIDDLE_WIDTH = 640	# at least the field's width in the widest panel (kMaxWidth in ChatPanel.cpp)
-FIELD_END_WIDTH = 8
 CHIP_BUTTON_SIZE = 50
 HINT_SIZE = (84, 18)
 STATUS_SIZE = 14
@@ -163,25 +160,6 @@ def draw_field(active):
 	return finish(image)
 
 
-def draw_field_middle(active):
-	"""Draws the text field's middle, a column from the middle of the field repeated, so it looks the same however wide
-	the field is and whether the game crops or stretches it."""
-
-	field = draw_field(active)
-	column = field.crop((field.width // 2, 0, field.width // 2 + 1, field.height))
-	return column.resize((FIELD_MIDDLE_WIDTH, field.height), Image.NEAREST)
-
-
-def draw_field_end(active, right):
-	"""Draws the text field's rounded left or right end, on the panel's steel, so it covers the corner of the middle under it."""
-
-	field = Image.new("RGBA", FIELD_SIZE, STEEL + (255,))
-	field.alpha_composite(draw_field(active))
-	if right:
-		return field.crop((field.width - FIELD_END_WIDTH, 0, field.width, field.height))
-	return field.crop((0, 0, FIELD_END_WIDTH, field.height))
-
-
 def draw_status_tip():
 	"""Draws a see-through button the size of a status icon, in four frames, which is over the icon for its tooltip."""
 
@@ -272,12 +250,8 @@ def make_images():
 	"""Returns the images by file name."""
 
 	return {
-		"chat-field.png": draw_field_middle(active=False),
-		"chat-field-typing.png": draw_field_middle(active=True),
-		"chat-field-left.png": draw_field_end(active=False, right=False),
-		"chat-field-right.png": draw_field_end(active=False, right=True),
-		"chat-field-typing-left.png": draw_field_end(active=True, right=False),
-		"chat-field-typing-right.png": draw_field_end(active=True, right=True),
+		"chat-field.png": draw_field(active=False),
+		"chat-field-typing.png": draw_field(active=True),
 		"chat-minimize.png": draw_title_button(minus_bar),
 		"chat-chip.png": draw_round_button(),
 		"chat-count.png": draw_count_bubble(),

@@ -26,10 +26,6 @@ UI_TYPE = 0x00000000
 IMAGE_FILES = {
 	"chat-field.png": 0xF9C0707C,
 	"chat-field-typing.png": 0x62225A7B,
-	"chat-field-left.png": 0x2E5B71C3,
-	"chat-field-right.png": 0x2E5B71C4,
-	"chat-field-typing-left.png": 0x2E5B71C5,
-	"chat-field-typing-right.png": 0x2E5B71C6,
 	"chat-minimize.png": 0x391B92E8,
 	"chat-chip.png": 0x3B71C9C9,
 	"chat-count.png": 0x4D2E7A26,

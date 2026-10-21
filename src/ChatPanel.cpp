@@ -37,10 +37,6 @@ static constexpr uint32_t kTitleID = 0x7B3E9A61;
 static constexpr uint32_t kBackgroundID = 0x7B3E9A66;
 static constexpr uint32_t kFieldID = 0x7B3E9A68;
 static constexpr uint32_t kTypingFieldID = 0x7B3E9A69;
-static constexpr uint32_t kFieldLeftID = 0x7B3E9A64;	// the field's rounded ends, over its middle, which stretches
-static constexpr uint32_t kFieldRightID = 0x7B3E9A65;
-static constexpr uint32_t kTypingFieldLeftID = 0x7B3E9A6E;
-static constexpr uint32_t kTypingFieldRightID = 0x7B3E9A6F;
 static constexpr uint32_t kFirstLineID = 0x7B3E9A70;
 static constexpr uint32_t kFirstInfoLineID = 0x7B3E9AB0;	// the same lines in grey, for lines that aren't chat
 static constexpr uint32_t kFirstNameID = 0x7B3E9B00;		// a window for each line and name color, at kFirstNameID + line * kNameLineStep + color
@@ -103,8 +99,8 @@ static constexpr uint32_t kButtonIDs[] = { kFieldID, kNewHintTextID };	// the fi
 // How the panel's windows follow its size (see FitChildren). The rows' windows are stretched with the title, and the status
 // icons move with the title bar's buttons.
 static constexpr uint32_t kRightEdgeIDs[] = { kStatusTipID, kMinimizeButtonID, kScrollbarID };
-static constexpr uint32_t kBottomEdgeIDs[] = { kFieldID, kTypingFieldID, kFieldLeftID, kTypingFieldLeftID, kInputID };
-static constexpr uint32_t kCornerIDs[] = { kFieldRightID, kTypingFieldRightID, kChatButtonID, kNewHintID, kNewHintTextID };
+static constexpr uint32_t kBottomEdgeIDs[] = { kFieldID, kTypingFieldID, kInputID };
+static constexpr uint32_t kCornerIDs[] = { kChatButtonID, kNewHintID, kNewHintTextID };
 static constexpr uint32_t kWideIDs[] = { kTitleID, kFieldID, kTypingFieldID, kInputID };
 
 // Windows in the title bar, shown unless the panel is minimized
@@ -1915,11 +1911,7 @@ void ChatPanel::ShowInput()
 {
 	bool open = !minimized;
 	SetChildVisible(kFieldID, open && !typing);
-	SetChildVisible(kFieldLeftID, open && !typing);
-	SetChildVisible(kFieldRightID, open && !typing);
 	SetChildVisible(kTypingFieldID, open && typing);
-	SetChildVisible(kTypingFieldLeftID, open && typing);
-	SetChildVisible(kTypingFieldRightID, open && typing);
 
 	if (!typing && input.empty())
 	{
