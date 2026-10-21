@@ -123,12 +123,12 @@ static constexpr size_t kLineCount = 8;				// the rows the UI script lays the pa
 static constexpr size_t kMinLineCount = 4;			// the rows the player can resize the panel to
 static constexpr size_t kMaxLineCount = 16;			// the rows in the UI script, as many as its IDs leave room for
 static constexpr int32_t kLineHeight = 18;
-static constexpr int32_t kLineWidth = 320;			// the rows' windows in the UI script, which kLineLength is for
+static constexpr int32_t kLineWidth = 320;			// the rows' windows in the UI script
+static constexpr int32_t kLineGutter = 2;			// their text's gutters on each side
 static constexpr int32_t kMinWidth = 300;			// so the title, the status and the text box still fit
 static constexpr int32_t kMaxWidth = 640;			// as wide as the text field's middle is drawn (FIELD_MIDDLE_WIDTH in make-ui-images.py)
 static constexpr size_t kMaxLines = 200;			// rows kept to scroll back through, wrapped rows included
 static constexpr int kWheelRows = 3;				// rows scrolled per notch of the mouse wheel
-static constexpr size_t kLineLength = 44;			// characters that fit on a row at kLineWidth, roughly, since the font isn't monospaced
 static constexpr int32_t kInputWidth = 276;			// the input's text window, less its gutters; the end of a longer message is shown while typing it
 static constexpr size_t kMaxInputLength = 500;
 static constexpr size_t kMaxInbox = 250;			// more than the launcher replays on connecting (GameBridge.RECENT_LINES), which comes all at once
@@ -165,18 +165,37 @@ static std::string ToHex(uint32_t value)
 	return text;
 }
 
-// Splits a line into pieces of up to `length` characters, breaking at spaces where possible
-static std::vector<std::wstring> Wrap(const std::wstring& text, size_t length)
+// Splits a line into pieces that fit `firstWidth` pixels on the first row and `width` on the rest (see
+// Text::EstimateWidth), breaking at spaces where possible
+static std::vector<std::wstring> Wrap(const std::wstring& text, int32_t firstWidth, int32_t width)
 {
 	std::vector<std::wstring> pieces;
 	size_t start = 0;
+	int32_t room = firstWidth;
 
-	while (text.size() - start > length)
+	while (Text::EstimateWidth(text.substr(start)) > room)
 	{
-		size_t end = text.rfind(L' ', start + length);
+		// The most characters that fit
+		size_t fit = start;
+		int32_t used = 0;
+		while (fit < text.size())
+		{
+			used += Text::EstimateWidth(std::wstring(1, text[fit]));
+			if (used > room)
+			{
+				break;
+			}
+			fit++;
+		}
+
+		size_t end = text.rfind(L' ', fit);
 		if (end == std::wstring::npos || end <= start)
 		{
-			end = start + length;	// a word that's too long is cut
+			end = fit;	// a word that's too long is cut
+		}
+		if (end == start)
+		{
+			end = start + 1;	// at least a character a row, however narrow
 		}
 
 		pieces.push_back(text.substr(start, end - start));
@@ -186,11 +205,13 @@ static std::vector<std::wstring> Wrap(const std::wstring& text, size_t length)
 		{
 			start++;
 		}
+		room = width;
 	}
 
 	pieces.push_back(text.substr(start));
 	return pieces;
 }
+
 
 // Returns the name color (in kNameColors) nearest to the launcher's, which comes as "[red,green,blue]", or -1 if there's none
 static int FindNameColor(const std::string& color)
@@ -873,7 +894,7 @@ void ChatPanel::Resize(int32_t x, int32_t y)
 		return;
 	}
 
-	size_t oldLength = GetLineLength();
+	int32_t oldWidth = GetLineWidth();
 	extraWidth += width - openWidth;
 	openWidth = width;
 	openLeft = left;
@@ -881,7 +902,7 @@ void ChatPanel::Resize(int32_t x, int32_t y)
 	openHeight = frame + rows * kLineHeight;
 	moved = true;	// its place is the player's now, so it isn't put back in the corner at its new size
 
-	if (GetLineLength() != oldLength)
+	if (GetLineWidth() != oldWidth)
 	{
 		Rewrap();
 	}
@@ -1576,27 +1597,36 @@ void ChatPanel::WrapNotice(const Notice& notice)
 
 		if (!line.empty())
 		{
-			for (const std::wstring& piece : Wrap(Text::Utf8ToWide(line), GetLineLength()))
+			// Chat starts with "<name>: ", and the name is split off to be shown in its color, so the message starts after
+			// it on the first row. The rows it wraps onto have no name.
+			std::string name;
+			int32_t width = GetLineWidth();
+			int32_t firstWidth = width;
+			if (first && chat && color >= 0 && line.compare(0, namePrefix.size(), namePrefix) == 0)
+			{
+				name = Shorten(notice.name, kNameLength);
+				if (notice.own)
+				{
+					name += " (You)";	// after shortening, so a long name can't cut it off
+				}
+				line = Trim(line.substr(namePrefix.size()));
+				firstWidth = width - Text::EstimateWidth(Text::Utf8ToWide(name + ":")) - kNameGap;
+			}
+
+			for (const std::wstring& piece : Wrap(Text::Utf8ToWide(line), firstWidth, width))
 			{
 				Line shown;
 				shown.text = Text::WideToUtf8(piece);
 				shown.chat = chat;
-
-				// Chat starts with "<name>: ", and the name is split off to be shown in its color. The lines it wraps onto have no name.
-				if (first && chat && color >= 0 && shown.text.compare(0, namePrefix.size(), namePrefix) == 0)
+				if (!name.empty())
 				{
-					shown.name = Shorten(notice.name, kNameLength);
-					if (notice.own)
-					{
-						shown.name += " (You)";	// after shortening, so a long name can't cut it off
-					}
+					shown.name = name;
 					shown.color = color;
-					shown.text = Trim(shown.text.substr(namePrefix.size()));
+					name.clear();
 				}
-				first = false;
-
 				lines.push_back(shown);
 			}
+			first = false;
 		}
 
 		start = end + 1;
@@ -1618,10 +1648,10 @@ void ChatPanel::Rewrap()
 	}
 }
 
-// The characters that fit on a row at the panel's width, roughly, as kLineLength does at the UI script's
-size_t ChatPanel::GetLineLength() const
+// How wide a row's text can be at the panel's width, in pixels, less its window's gutters
+int32_t ChatPanel::GetLineWidth() const
 {
-	return kLineLength * static_cast<size_t>(kLineWidth + extraWidth) / kLineWidth;
+	return kLineWidth + extraWidth - 2 * kLineGutter;
 }
 
 void ChatPanel::SetMinimized(bool value)
