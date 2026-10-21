@@ -7,4 +7,6 @@ namespace Text
 	std::string ToUtf8(const char* text);
 
 	std::wstring Utf8ToWide(const std::string& text);
+
+	std::string WideToUtf8(const std::wstring& text);
 }

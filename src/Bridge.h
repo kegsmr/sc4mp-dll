@@ -4,6 +4,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <deque>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -26,6 +27,11 @@ public:
 
 	bool IsEnabled() const;
 
+	// Called on the bridge thread with each line the launcher sends to show in game (chat, save results and alerts).
+	// `history` is true for the recent lines the launcher sends when the game connects. Set it before Start().
+	using NotifyHandler = std::function<void(const std::string& text, bool history)>;
+	void SetNotifyHandler(NotifyHandler handler);
+
 	// Queues a message for the launcher, adding the current time. Messages wait in the queue
 	// while the launcher isn't connected.
 	void Send(JsonWriter message);
@@ -42,6 +48,7 @@ private:
 	unsigned short port = 0;
 	std::thread thread;
 	std::atomic<bool> stopping = false;
+	NotifyHandler notifyHandler;
 
 	std::mutex mutex;
 	std::condition_variable stopped;

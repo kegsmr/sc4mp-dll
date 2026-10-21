@@ -90,6 +90,12 @@
     <ClCompile Include="Bridge.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ChatPanel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\cRZBaseSystemService.cpp">
+      <Filter>Source Files\GZCOM</Filter>
+    </ClCompile>
     <ClCompile Include="Json.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -159,6 +165,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Bridge.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ChatPanel.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GZWinInterfaces.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Json.h">

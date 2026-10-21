@@ -364,3 +364,5 @@ FodyWeavers.xsd
 
 # vcpkg repository build files
 vcpkg_installed/
+# The packed UI scripts (see tools/make-ui-dat.py)
+/sc4mp-dll-ui.dat
