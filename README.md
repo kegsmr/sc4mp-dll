@@ -1,15 +1,28 @@
 # SC4MP DLL
+A plugin for the PC videogame [SimCity 4](https://en.wikipedia.org/wiki/SimCity_4) that brings multiplayer chat and save status into the game. Uses C++ and the game's GZCOM interfaces through [gzcom-dll](https://github.com/nsgomez/gzcom-dll). Built to work with the [SC4MP Client](https://github.com/kegsmr/sc4mp-client) and [SC4MP Server](https://github.com/kegsmr/sc4mp-server).
 
-## Chat panel
+# Installation
+The DLL comes with the SC4MP Launcher, which copies `sc4mp.dll` and `sc4mp-dll-ui.dat` into the game's `Plugins` folder when it starts SimCity 4. To install a build by hand, put both files in the top of the `Plugins` folder (DLL plugins don't load from subfolders). It works on Windows 7 SP1 and newer.
 
-When SimCity 4 is started by the SC4MP launcher, the DLL shows the server's chat in the city and region views. Press Enter (or click the text field or the send button) to type a message (up to 500 characters), and Enter to send it. The field stays open for the next one; Enter on an empty field or Esc goes back to the game. While typing, the keys go to the chat (through the game's key filter), so the game's shortcuts don't act on them. A click outside the panel goes back to the game and keeps the message for later, as does switching between the city and region views. A message starting with `/` runs a launcher command, eg. `/status`. The title bar shows the server's name and the save status's icon (hover it for the status): green when connected or saved, blue while saving, amber while the server can't be reached, red when a save failed, and indigo for a guest. After a failed save, the launcher keeps it red until it's reconnected to the server or a save gets through. The game's "City Saved." message box is hidden, since the launcher puts the save's result in the chat, in green or red, and shows how much of the city it has sent (eg. "Saving... (120/3,456KB)") as the chat's last line while it's saving. The mouse wheel, the scrollbar and Page Up/Down (while typing) scroll back through the last 200 lines. The panel can be dragged by its title bar, and resized by pressing within 16 pixels of either bottom corner and dragging (300 to 640 pixels wide and 4 to 16 lines tall). Its size is kept while the game runs. The arrow minimizes it to a round button with a globe on it in the top right corner in the city view (the bottom right in the region view, whose top right has the game's own round buttons), whose ring shows the save status and whose red bubble counts new messages (Enter or a click opens it again); it moves out of the way of the game's own windows there. The panel starts minimized, and keeps the player's choice while the game runs.
+# Usage
+Join a server with the SC4MP Launcher. In game:
+- A chat panel shows the server's chat in the city and region views. Press Enter (or click the text field) to type, Enter to send, and Esc to go back to the game. A message starting with `/` runs a launcher command, eg. `/status`. The `say <message>` and `sc4mp <command>` cheat codes work too.
+- The title bar shows the server's name and the save status (hover the icon for it). While saving, the chat's last line shows how much of the city has been sent, and the result is shown in green or red. The game's "City Saved." message is hidden, since the launcher reports whether the server took the save.
+- The arrow minimizes the panel to a round button with a globe on it, in the top right corner in the city view and the bottom right in the region view. Its ring shows the save status and its red bubble counts new messages. It moves out of the way of the game's own windows.
+- The panel can be dragged by its title bar and resized by its bottom corners. The mouse wheel, the scrollbar and Page Up/Down scroll back through the last 200 lines.
+- Opening a city that belongs to another mayor shows a warning, since your saves there won't be kept, with "Back to region" and "Look around". The launcher's alerts (eg. a failed save) are shown in the same kind of dialog.
+- When you take over a city, its mayor name is set to yours, and saved with your next save.
+- The panel and dialogs hide with the game's UI.
 
-The panel is a normal SC4 window, made by the game from the UI script in `ui/ChatPanel.ui`. `sc4mp-dll-ui.dat` must be in the Plugins folder next to `sc4mp.dll`; the build makes it with:
+What happens is logged to `SC4MP.log` next to the DLL.
+
+# Compiling
+Clone with `git clone --recurse-submodules` (or run `git submodule update --init`) to get [gzcom-dll](https://github.com/nsgomez/gzcom-dll) in `vendor/gzcom-dll`. Then build `src/SC4MP.sln` in Visual Studio (Release, x86). Every push is also built by GitHub Actions, which checks the DLL still loads on Windows 7 and uploads `sc4mp.dll` and `sc4mp-dll-ui.dat` as an artifact.
+
+The panel and dialogs are SimCity 4 windows made by the game from the UI scripts in `ui`, so `sc4mp-dll-ui.dat` must go in `Plugins` with the DLL. To build it, run:
 
 ```
 python tools/make-ui-dat.py sc4mp-dll-ui.dat
 ```
 
-The panel's images are in `ui/images`, drawn by `tools/make-ui-images.py` (which needs Pillow). After changing the drawing, run it and commit the PNGs. `make-ui-dat.py` lists each image's instance ID.
-
-UI scripts are text, one `<LEGACY>` tag per window. The easiest way to design one is to copy a window from the game's own UI (eg. with the UIEditor or the Reader) and change it; the window ids in the script must match `ChatPanel.cpp`.
+The images in `ui/images` are drawn by `tools/make-ui-images.py` (which needs Pillow). After changing the drawing, run it and commit the PNGs. UI scripts are text, one `<LEGACY>` tag per window. The easiest way to make one is to copy a window from the game's own UI (eg. with the UIEditor or the Reader) and change it. The window IDs must match the ones in `ChatPanel.cpp` or `GuardDialog.cpp`.
