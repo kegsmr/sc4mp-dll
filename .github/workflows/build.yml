@@ -1,8 +1,10 @@
 name: Build
 
+# Only after merging into main, so unreviewed code (eg. from a pull request) isn't built into a downloadable DLL.
+# Other branches can be built with "Run workflow".
 on:
   push:
-  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
