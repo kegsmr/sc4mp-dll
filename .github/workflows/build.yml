@@ -16,9 +16,8 @@ jobs:
 
       - uses: microsoft/setup-msbuild@v2
 
-      # The post-build step copies the DLL to a local SC4 install, which doesn't exist here
       - name: Build
-        run: msbuild src/SC4MP.sln /p:Configuration=Release /p:Platform=x86 /p:PostBuildEventUseInBuild=false /m
+        run: msbuild src/SC4MP.sln /p:Configuration=Release /p:Platform=x86 /m
 
       # Some players are still on Windows 7 SP1, where the DLL fails to load if it statically imports
       # anything newer. The STL loads newer APIs with GetProcAddress, which is fine, so only static

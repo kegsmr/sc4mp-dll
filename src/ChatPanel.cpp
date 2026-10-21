@@ -21,7 +21,6 @@
 
 #include <algorithm>
 #include <cstdio>
-#include <cwchar>
 #include <iterator>
 #include <vector>
 
@@ -44,15 +43,15 @@ static constexpr uint32_t kInputID = 0x7B3E9A80;
 static constexpr uint32_t kChatButtonID = 0x7B3E9A81;
 static constexpr uint32_t kMinimizeButtonID = 0x7B3E9A6A;
 static constexpr uint32_t kStatusTipID = 0x7B3E9A90;	// a see-through button over the status icon, for its tooltip
-
-// The minimized panel, a button in the corner with the status icon and unread count on it
 static constexpr uint32_t kScrollbarID = 0x7B3E9A6B;
 static constexpr uint32_t kNewHintID = 0x7B3E9A6C;		// "N new below", while the player has scrolled up
 static constexpr uint32_t kNewHintTextID = 0x7B3E9A6D;
+
+// The minimized panel, a round button in the corner with the status ring, the globe and the unread count on it
 static constexpr uint32_t kChipID = 0x7B3E9AA0;	// the round button, under the status ring and the globe
 static constexpr uint32_t kChipCountID = 0x7B3E9AA1;	// the unread count, on the red bubble
 static constexpr uint32_t kChipCountBubbleID = 0x7B3E9AA9;
-static constexpr uint32_t kChipBubbleID = 0x7B3E9AAA;	// the globe, a button too, so it's clickable and lights up
+static constexpr uint32_t kChipGlobeID = 0x7B3E9AAA;	// the globe, a button too, so it's clickable and lights up
 static constexpr uint32_t kChipIconOffset = 0x10;	// each status ring on the chip has the ID of the title bar's icon plus this
 static constexpr int32_t kChipWidth = 56;	// the 50 pixel button, with room for the count bubble over its top right
 static constexpr int32_t kChipHeight = 56;
@@ -69,9 +68,9 @@ static constexpr int32_t kSavedDialogScanTop = 120;	// the middle of the game is
 static constexpr int32_t kSavedDialogScanStep = 20;
 static constexpr ULONGLONG kSavedDialogInterval = 100;	// how often it's looked for on the game window's messages
 static constexpr int32_t kSavedDialogStep = 6;		// the spacing of the points it's searched at
-static constexpr ULONGLONG kChipMoveDelay = 500;
+static constexpr ULONGLONG kChipMoveDelay = 500;	// how long a new spot has to stay wanted before the chip moves, so it doesn't flicker
 static constexpr uint32_t kPuckID = 0x0987B48F;	// the city view's control panel (ui C973B411), which hides with the game's UI
-static constexpr ULONGLONG kUICheckInterval = 250;	// how long that has to stay so before the chip moves, so it doesn't flicker
+static constexpr ULONGLONG kUICheckInterval = 250;	// how often it's checked
 
 // The launcher's colors for player names (CHAT_NAME_COLORS in sc4mpclient.py), in the same order, as the name windows in the UI script have them.
 // A few are a little darker than the launcher's, to read on the panel's background. The launcher sends a name's color, and the nearest of these is used.
@@ -695,7 +694,7 @@ bool ChatPanel::Click(uint32_t buttonID)
 		ScrollToBottom();
 		return true;
 	case kChipID:
-	case kChipBubbleID:
+	case kChipGlobeID:
 		SetMinimized(false);
 		return true;
 	case kFieldID:
@@ -818,13 +817,6 @@ void ChatPanel::Wheel(const cGZMessage& msg)
 {
 	// Only the low word is the turn (like WM_MOUSEWHEEL's), so a turn down isn't read as a big turn up
 	int32_t delta = static_cast<int16_t>(msg.dwData3 & 0xFFFF);
-
-	// Once a game, since what the message holds was only seen once
-	if (!loggedWheel)
-	{
-		Log::Line("The mouse wheel on the chat panel: d1=0x" + ToHex(msg.dwData1) + " d2=0x" + ToHex(msg.dwData2) + " d3=0x" + ToHex(msg.dwData3) + " (" + std::to_string(delta) + ")");
-		loggedWheel = true;
-	}
 
 	if (minimized)
 	{
@@ -1129,21 +1121,6 @@ void ChatPanel::ClampToView(int32_t& left, int32_t& top) const
 	}
 }
 
-// Where the panel is in the game window. Its own place is in its view's window, which is in its parent's, and so on.
-void ChatPanel::GetPanelOrigin(int32_t& left, int32_t& top) const
-{
-	left = 0;
-	top = 0;
-
-	cIGZWin* pCurrent = pWin;
-	for (int depth = 0; pCurrent && depth < kMaxWinDepth; depth++)
-	{
-		left += pCurrent->GetL();
-		top += pCurrent->GetT();
-		pCurrent = pCurrent->GetParentWin();
-	}
-}
-
 // Returns the ID of the shown button (in kButtonIDs) at a point from the panel's top left corner, or 0 if there's none
 uint32_t ChatPanel::GetButtonAt(int32_t x, int32_t y) const
 {
@@ -1398,18 +1375,6 @@ bool ChatPanel::IsOnChild(uint32_t id, int32_t x, int32_t y) const
 // doesn't also act on them (eg. B for bulldoze).
 bool ChatPanel::HandleKey(const cGZMessage& msg)
 {
-	// Once a game, since what the messages hold wasn't seen in game yet
-	if (msg.dwMessageType == kGZWinMessageCharacter && !loggedCharacter)
-	{
-		Log::Line("A character on the chat panel: d1=0x" + ToHex(msg.dwData1) + " d2=0x" + ToHex(msg.dwData2) + " d3=0x" + ToHex(msg.dwData3));
-		loggedCharacter = true;
-	}
-	if (msg.dwMessageType == kGZWinMessageKeyDown && !loggedKeyDown)
-	{
-		Log::Line("A key press on the chat panel: d1=0x" + ToHex(msg.dwData1) + " d2=0x" + ToHex(msg.dwData2) + " d3=0x" + ToHex(msg.dwData3));
-		loggedKeyDown = true;
-	}
-
 	// The key filter may not see Enter's release while the panel takes it
 	if (msg.dwMessageType == kGZWinMessageKeyUp && msg.dwData1 == VK_RETURN)
 	{
@@ -1869,7 +1834,7 @@ void ChatPanel::Layout()
 		SetChildVisible(id, !minimized);
 	}
 	SetChildVisible(kChipID, minimized);
-	SetChildVisible(kChipBubbleID, minimized);
+	SetChildVisible(kChipGlobeID, minimized);
 
 	// Shrunk too, so the empty part doesn't take clicks meant for the view under it
 	int32_t width = openWidth;
@@ -2219,7 +2184,7 @@ void ChatPanel::ShowChipTip()
 	}
 
 	SetTip(kChipID, tip);
-	SetTip(kChipBubbleID, tip);
+	SetTip(kChipGlobeID, tip);
 }
 
 // Where the chip goes in its view: home in the top right corner (the bottom right in the region view, where its top
@@ -2257,7 +2222,7 @@ cIGZWin* ChatPanel::GetCoveringWindow(int32_t left, int32_t top) const
 	// The view's place in the game window, where the window manager's points are
 	int32_t viewLeft = 0;
 	int32_t viewTop = 0;
-	GetPanelOrigin(viewLeft, viewTop);
+	GetWindowOrigin(pWin, viewLeft, viewTop);
 	viewLeft -= pWin->GetL();
 	viewTop -= pWin->GetT();
 
@@ -2340,7 +2305,7 @@ void ChatPanel::AvoidCoveringWindows()
 		return;
 	}
 
-	const char* const names[] = { "home, in the top right corner", "below a window of the game's that covers its home", "to the bottom right corner, since a window of the game's covers its home" };
+	const char* const names[] = { "home", "below a window of the game's that covers its home", "to the bottom right corner, since a window of the game's covers its home" };
 	Log::Line(std::string("Moved the chat chip ") + names[static_cast<int>(wanted)]);
 
 	chipSpot = wanted;

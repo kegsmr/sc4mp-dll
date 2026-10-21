@@ -10,19 +10,18 @@
 #include <optional>
 #include <string>
 #include <utility>
-#include <vector>
 #include <Windows.h>
 
 class cIGZWin;
 
 // A chat window in the city and region views. It shows the last lines the launcher sent, and the
 // player presses Enter (or clicks the send button) to type a message, Enter again to send it and Esc to cancel.
-// The title bar shows the server's name and the launcher's save status. The panel can be minimized to a small button
-// in the bottom right corner, which it starts as. The choice is kept while the game runs. The open panel can be dragged by its
+// The title bar shows the server's name and the launcher's save status. The panel can be minimized to a round button
+// with a globe on it in the view's corner, which it starts as. The choice is kept while the game runs. The open panel can be dragged by its
 // title band and resized by its bottom corners, and its place and size are kept while the game runs too.
 //
 // The window is made by the game from the UI script in ui/ChatPanel.ui, so it looks like the game's own.
-// Only Post() may be called from another thread: it queues the line, and the queue is emptied every
+// Only the Post functions may be called from another thread: they queue what they get, which is handled every
 // frame on the game thread (OnTick), since the game's windows must only be used there.
 // The mouse comes to the panel's window proc (DoWinProcMessage) from the game, which keeps what the panel handles from
 // the map under it. So do the keys while the player types, since the panel has the game's focus then. Enter, which opens
@@ -83,7 +82,6 @@ private:
 	bool Click(uint32_t buttonID);
 	void Press(int32_t x, int32_t y);
 	void Wheel(const cGZMessage& msg);
-	void GetPanelOrigin(int32_t& left, int32_t& top) const;
 	uint32_t GetButtonAt(int32_t x, int32_t y) const;
 	bool IsOnChild(uint32_t id, int32_t x, int32_t y) const;
 	void CheckSavedDialog(bool fromMessage);
@@ -152,7 +150,7 @@ private:
 
 	enum class ChipSpot
 	{
-		Home,	// the view's top right corner
+		Home,	// the view's top right corner, or the bottom right in the region view
 		Below,	// just below a window of the game's that covers home
 		Corner,	// the bottom right corner, if that one is too tall
 	};
@@ -180,7 +178,7 @@ private:
 	int32_t parentHeight = 0;
 	bool regionView = false;	// in the region view, the chip and the open panel are in the bottom right corner
 	bool uiHidden = false;	// hidden with the game's UI
-	ULONGLONG lastUICheck = 0;	// in the region view, the top right corner is below its top bar
+	ULONGLONG lastUICheck = 0;	// when FollowGameUI last checked whether the game's UI is hidden
 	ChipSpot chipSpot = ChipSpot::Home;
 	ChipSpot wantedChipSpot = ChipSpot::Home;
 	ULONGLONG wantedSince = 0;	// when the chip first wanted to move to wantedChipSpot
@@ -202,9 +200,6 @@ private:
 	int32_t resizeWidth = 0;
 	int32_t resizeHeight = 0;
 	size_t resizeLineCount = 0;
-	bool loggedWheel = false;	// the wheel's first message is logged, since what it holds isn't sure
-	bool loggedCharacter = false;	// and so are the first character and key press on the panel
-	bool loggedKeyDown = false;
 	ULONGLONG savedDialogDeadline = 0;	// until when the game's "City Saved." is looked for, after a save
 	ULONGLONG lastSavedDialogCheck = 0;
 	HWND gameWindow = nullptr;	// the game's window, from the messages it gets
@@ -229,7 +224,7 @@ private:
 	bool enterDown = false;	// Enter is held, so its repeats don't open the chat again
 	bool caretShown = true;	// the blinking caret, while typing
 	ULONGLONG caretTime = 0;
-	bool minimized = true;	// only a small button in the bottom right corner is shown, as when the game starts
+	bool minimized = true;	// only the round button is shown, as when the game starts
 	int unread = 0;
 	std::string serverName;
 	std::pair<std::string, std::string> status{ "connected", "Connected" };	// until the launcher says otherwise
