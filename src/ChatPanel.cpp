@@ -21,7 +21,6 @@
 
 #include <algorithm>
 #include <cstdio>
-#include <cwchar>
 #include <iterator>
 #include <vector>
 
@@ -1119,21 +1118,6 @@ void ChatPanel::ClampToView(int32_t& left, int32_t& top) const
 	if (top < 0)
 	{
 		top = 0;
-	}
-}
-
-// Where the panel is in the game window. Its own place is in its view's window, which is in its parent's, and so on.
-void ChatPanel::GetPanelOrigin(int32_t& left, int32_t& top) const
-{
-	left = 0;
-	top = 0;
-
-	cIGZWin* pCurrent = pWin;
-	for (int depth = 0; pCurrent && depth < kMaxWinDepth; depth++)
-	{
-		left += pCurrent->GetL();
-		top += pCurrent->GetT();
-		pCurrent = pCurrent->GetParentWin();
 	}
 }
 
@@ -2238,7 +2222,7 @@ cIGZWin* ChatPanel::GetCoveringWindow(int32_t left, int32_t top) const
 	// The view's place in the game window, where the window manager's points are
 	int32_t viewLeft = 0;
 	int32_t viewTop = 0;
-	GetPanelOrigin(viewLeft, viewTop);
+	GetWindowOrigin(pWin, viewLeft, viewTop);
 	viewLeft -= pWin->GetL();
 	viewTop -= pWin->GetT();
 

@@ -5,7 +5,6 @@
 
 #include "Bridge.h"
 #include "Log.h"
-#include "Text.h"
 #include "version.h"
 
 #include <chrono>

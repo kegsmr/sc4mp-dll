@@ -10,7 +10,6 @@
 #include <optional>
 #include <string>
 #include <utility>
-#include <vector>
 #include <Windows.h>
 
 class cIGZWin;
@@ -83,7 +82,6 @@ private:
 	bool Click(uint32_t buttonID);
 	void Press(int32_t x, int32_t y);
 	void Wheel(const cGZMessage& msg);
-	void GetPanelOrigin(int32_t& left, int32_t& top) const;
 	uint32_t GetButtonAt(int32_t x, int32_t y) const;
 	bool IsOnChild(uint32_t id, int32_t x, int32_t y) const;
 	void CheckSavedDialog(bool fromMessage);
