@@ -45,7 +45,7 @@
     <ClCompile Include="..\vendor\gzcom-dll\src\cSCBaseProperty.cpp">
       <Filter>Source Files\GZCOM</Filter>
     </ClCompile>
-    <ClCompile Include="..\vendor\gzcom-dll\src\EASTLAllocatorSC4.cpp">
+    <ClCompile Include="EASTLAllocator.cpp">
       <Filter>Source Files\GZCOM</Filter>
     </ClCompile>
     <ClCompile Include="..\vendor\gzcom-dll\src\StringResourceManager.cpp">
