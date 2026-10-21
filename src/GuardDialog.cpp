@@ -205,9 +205,18 @@ void GuardDialog::PostClaim(bool reset, const std::string& owner, const std::str
 	claims.push_back(claim);
 }
 
+void GuardDialog::PostTakeover(const std::string& path, const std::string& mayor)
+{
+	std::lock_guard<std::mutex> lock(inboxMutex);
+
+	takeoverPath = path;
+	takeoverMayor = mayor;
+}
+
 void GuardDialog::CityOpened(const std::string& path)
 {
 	warnedPath.clear();
+	renamedPath.clear();
 	cityOpenedTime = GetTickCount64();
 	openedTime = cityOpenedTime;
 
@@ -327,9 +336,18 @@ bool GuardDialog::OnTick(uint32_t unknown1)
 	}
 
 	std::optional<Warning> warning;
+	std::string newTakeoverPath;
+	std::string newTakeoverMayor;
 	{
 		std::lock_guard<std::mutex> lock(inboxMutex);
 		warning.swap(pendingWarning);
+		newTakeoverPath.swap(takeoverPath);
+		newTakeoverMayor.swap(takeoverMayor);
+	}
+
+	if (!newTakeoverPath.empty())
+	{
+		TakeOver(newTakeoverPath, newTakeoverMayor);
 	}
 
 	// Logs when the game's first dialog after the city opened (eg. to reconcile the edges) comes, to check the order
@@ -955,6 +973,35 @@ bool GuardDialog::IsGameModal()
 {
 	cIGZWinMgrPtr pWinMgr;
 	return pWinMgr && pWinMgr->IsModal();
+}
+
+// The region view, the city's info and the server (its `mayor_name`) read the mayor name from the savegame, so the
+// player's name shows there after their first save
+void GuardDialog::TakeOver(const std::string& path, const std::string& mayor)
+{
+	if (mayor.empty())
+	{
+		return;
+	}
+	if (IsSameSavegame(path, renamedPath))
+	{
+		Log::Line("Ignored the launcher's takeover, since the mayor name was already set since the city opened");
+		return;
+	}
+	if (!IsOpenCity(path))
+	{
+		Log::Line("Ignored a takeover for a city that isn't open anymore: " + path);
+		return;
+	}
+
+	cISC4AppPtr pApp;
+	cISC4City* pCity = pApp->GetCity();
+
+	// Slot 17, as in upstream gzcom-dll, which declares it void, so its result isn't used. The game keeps text as UTF-8.
+	pCity->SetMayorName(cRZBaseString(mayor.c_str()));
+	renamedPath = path;
+
+	Log::Line("Set the mayor name to " + mayor + " for this takeover");
 }
 
 bool GuardDialog::IsOpenCity(const std::string& path)

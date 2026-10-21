@@ -109,6 +109,11 @@ void Bridge::SetClaimHandler(ClaimHandler handler)
 	claimHandler = std::move(handler);
 }
 
+void Bridge::SetTakeoverHandler(TakeoverHandler handler)
+{
+	takeoverHandler = std::move(handler);
+}
+
 void Bridge::Send(JsonWriter message)
 {
 	if (!IsEnabled())
@@ -377,6 +382,16 @@ void Bridge::HandleLine(const std::string& line)
 		if (claimHandler)
 		{
 			claimHandler(false, message["owner"], message["city"], message["path"]);
+		}
+	}
+	else if (type == "takeover")
+	{
+		// The player is taking over the open city, which still has the last mayor's name
+		Log::Line("Launcher (takeover): " + message["path"] + " is taken over by " + message["mayor"]);
+
+		if (takeoverHandler)
+		{
+			takeoverHandler(message["path"], message["mayor"]);
 		}
 	}
 	else

@@ -37,6 +37,11 @@ public:
 	// Keeps the launcher's list of cities that belong to other mayors, cleared by `reset`. Safe to call from any thread.
 	void PostClaim(bool reset, const std::string& owner, const std::string& city, const std::string& path);
 
+	// Sets the mayor name of the city saved at `path` to `mayor` on the next frame, if it's still the open city, when the
+	// launcher says the player is taking it over. It isn't saved here: the game writes it with the player's next save.
+	// Safe to call from any thread.
+	void PostTakeover(const std::string& path, const std::string& mayor);
+
 	// Shows the warning right away if the city saved at `path`, which just opened, is in the launcher's list, so it
 	// comes before the game's own prompts (eg. to reconcile the edges). Called on the game thread.
 	void CityOpened(const std::string& path);
@@ -74,6 +79,7 @@ private:
 	LRESULT FilterMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, bool& handled) override;
 
 	void Show(const Warning& warning);
+	void TakeOver(const std::string& path, const std::string& mayor);
 	void Close();
 	bool Click(uint32_t buttonID);
 	bool HandleMouse(HWND hWnd, UINT uMsg, LPARAM lParam);
@@ -110,6 +116,10 @@ private:
 	std::deque<Warning> alerts;	// waiting to be shown, one at a time
 	std::optional<Warning> shownAlert;	// the alert shown, if any
 	std::vector<Warning> claims;	// the launcher's list of cities that belong to other mayors
+	std::string takeoverPath;	// the city the launcher said the player is taking over, until the next frame
+	std::string takeoverMayor;
+
+	std::string renamedPath;	// the open city's savegame, if its mayor name was set, so it's set once per open
 
 	std::string warnedPath;	// the open city's savegame, if it was warned about, so the launcher's own check doesn't warn again
 	ULONGLONG cityOpenedTime = 0;	// when the city opened, until the game's first dialog after it is logged
