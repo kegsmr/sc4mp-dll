@@ -662,6 +662,7 @@ void ChatPanel::Press(int32_t x, int32_t y)
 	}
 
 	uint32_t clicked = GetButtonAt(x, y);
+	Log::Line("DIAG press " + std::to_string(x) + "," + std::to_string(y) + " button=" + ToHex(clicked));
 	if (clicked)
 	{
 		Click(clicked);
@@ -811,6 +812,7 @@ void ChatPanel::FollowScrollbar()
 	{
 		return;
 	}
+	Log::Line("DIAG scrollbar value " + std::to_string(scrollbarValue) + " -> " + std::to_string(value) + ", max " + std::to_string(GetMaxScroll()) + ", rows " + std::to_string(scrollRows));
 
 	// Its value is the top row shown (see ShowScroll), and ScrollBy sets it back if it's past the rows there are
 	int64_t maxScroll = static_cast<int64_t>(GetMaxScroll());
