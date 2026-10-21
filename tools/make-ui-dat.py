@@ -43,12 +43,6 @@ IMAGE_FILES = {
 	"status-connected.png": 0xBD4F44DD,
 	"status-disconnected.png": 0xBEF3434A,
 	"status-guest.png": 0x71DB29A5,
-
-	# Region tile badges, not used yet
-	"tile-you.png": 0x8A6EFE32,
-	"tile-claimed.png": 0x6371783A,
-	"tile-unclaimed.png": 0x594BBB73,
-	"tile-abandoned.png": 0x124589CC,
 }
 
 IMAGE_TYPE = 0x856DDBAC

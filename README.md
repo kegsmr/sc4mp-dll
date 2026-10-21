@@ -1,6 +1,5 @@
 # SC4MP DLL
 
-TODO
 ## Chat panel
 
 When SimCity 4 is started by the SC4MP launcher, the DLL shows the server's chat in the city and region views. Press Enter (or click the text field or the send button) to type a message, and Enter to send it. The field stays open for the next one; Enter on an empty field or Esc goes back to the game. A click outside the panel goes back to the game and keeps the message for later. A message starting with `/` runs a launcher command, eg. `/status`. The title bar shows the server's name and the save status's icon (hover it for the status). The mouse wheel, the scrollbar and Page Up/Down (while typing) scroll back through the last 200 lines. The panel can be dragged by its title bar. The arrow minimizes it to a round button in the top right corner, whose ring shows the save status and whose red bubble counts new messages (Enter or a click opens it again); it moves out of the way of the game's own windows there. The panel starts minimized, and keeps the player's choice while the game runs.

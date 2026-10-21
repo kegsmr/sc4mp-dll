@@ -13,7 +13,6 @@ blits them. Button images are strips of four frames, like the game's: disabled, 
 Usage: python tools/make-ui-images.py   (needs Pillow: pip install pillow)
 """
 
-import math
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter
@@ -26,11 +25,6 @@ STEEL = (156, 178, 194)
 INSET = (218, 224, 229)
 TEXT = (63, 73, 103)
 
-# For the region tile badges
-EDGE_DARK = (70, 84, 120)
-EDGE_LIGHT = (240, 244, 252)
-NAVY = (32, 40, 80)
-
 # Status colours, matching the launcher's overlay (resources/overlay-*.png in sc4mp-client)
 GREEN = (46, 160, 67)
 BLUE = (52, 120, 220)
@@ -38,11 +32,6 @@ RED = (206, 52, 52)
 AMBER = (222, 150, 30)
 GREY = (128, 128, 128)
 INDIGO = (60, 70, 190)
-
-# The launcher's region map colours (resources/launcher-map-tile-*.png in sc4mp-client)
-TILE_YOU = (136, 203, 116)
-TILE_CLAIMED = (179, 196, 208)
-TILE_UNCLAIMED = (92, 151, 190)
 
 # The layout, which must match ui/ChatPanel.ui
 FIELD_SIZE = (290, 26)
@@ -86,24 +75,6 @@ def gradient(size, top, bottom):
 		t = y / max(1, height - 1)
 		draw.line([(0, y), (width, y)], fill=tuple(round(top[i] + (bottom[i] - top[i]) * t) for i in range(3)) + (255,))
 	return image
-
-
-def rounded(size, radius, alpha=255):
-	mask = Image.new("L", size, 0)
-	ImageDraw.Draw(mask).rounded_rectangle([0, 0, size[0] - 1, size[1] - 1], radius, fill=alpha)
-	return mask
-
-
-def bevel_box(width, height, top, bottom, radius, alpha=255):
-	"""Returns a rounded box at 4x with a dark outline and a light inner rim, like the game's bevels."""
-
-	size = (width * SCALE, height * SCALE)
-	box = gradient(size, top, bottom)
-	box.putalpha(rounded(size, radius * SCALE, alpha))
-	draw = ImageDraw.Draw(box)
-	draw.rounded_rectangle([0, 0, size[0] - 1, size[1] - 1], radius * SCALE, outline=EDGE_DARK + (255,), width=SCALE)
-	draw.rounded_rectangle([SCALE, SCALE, size[0] - 1 - SCALE, size[1] - 1 - SCALE], (radius - 1) * SCALE, outline=EDGE_LIGHT + (160,), width=SCALE)
-	return box
 
 
 def finish(image):
@@ -274,35 +245,6 @@ def draw_status(colour, symbol, size=14):
 	return image
 
 
-def draw_tile(colour, kind):
-	"""Draws a small region tile badge, for showing who owns a tile (not used by the panel yet)."""
-
-	size = 20
-	image = bevel_box(size, size, tuple(min(255, c + 40) for c in colour), colour, 4)
-	draw = ImageDraw.Draw(image)
-	if kind == "abandoned":
-		# Claimed grey with unclaimed blue stripes, like the launcher's abandoned tile
-		stripes = Image.new("RGBA", image.size)
-		stripe_draw = ImageDraw.Draw(stripes)
-		for x in range(-size, size * 2, 5):
-			stripe_draw.line(scaled(x, size + 2, x + size + 4, -2), fill=TILE_UNCLAIMED + (255,), width=round(1.8 * SCALE))
-		inner = rounded(image.size, 3 * SCALE)
-		inner = inner.crop((0, 0) + image.size)
-		image.paste(stripes, (0, 0), Image.composite(stripes.getchannel("A"), Image.new("L", image.size, 0), inner))
-		ImageDraw.Draw(image).rounded_rectangle([0, 0, image.width - 1, image.height - 1], 4 * SCALE, outline=EDGE_DARK + (255,), width=SCALE)
-	elif kind == "you":
-		points = []
-		for i in range(10):
-			r = 6 if i % 2 == 0 else 2.6
-			a = math.pi / 2 + i * math.pi / 5
-			points.append(((10 + r * math.cos(a)) * SCALE, (10.5 - r * math.sin(a)) * SCALE))
-		draw.polygon(points, fill=(255, 255, 255, 255), outline=NAVY + (255,), width=SCALE // 2)
-	elif kind == "claimed":
-		house = [(5, 10), (10, 5), (15, 10), (13.5, 10), (13.5, 15), (6.5, 15), (6.5, 10)]
-		draw.polygon([(x * SCALE, y * SCALE) for x, y in house], fill=(255, 255, 255, 255), outline=NAVY + (255,), width=SCALE // 2)
-	return finish(image)
-
-
 def make_images():
 	"""Returns the images by file name."""
 
@@ -326,10 +268,6 @@ def make_images():
 		"status-connected.png": draw_status(GREEN, "dot"),
 		"status-disconnected.png": draw_status(AMBER, "dash"),	# amber like a save that can't reach the server
 		"status-guest.png": draw_status(INDIGO, "person"),
-		"tile-you.png": draw_tile(TILE_YOU, "you"),
-		"tile-claimed.png": draw_tile(TILE_CLAIMED, "claimed"),
-		"tile-unclaimed.png": draw_tile(TILE_UNCLAIMED, "unclaimed"),
-		"tile-abandoned.png": draw_tile(TILE_CLAIMED, "abandoned"),
 	}
 
 

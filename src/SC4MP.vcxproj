@@ -11,30 +11,12 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\vendor\EASTL\source\assert.cpp" />
-    <ClCompile Include="..\vendor\EASTL\source\atomic.cpp" />
-    <ClCompile Include="..\vendor\EASTL\source\fixed_pool.cpp" />
-    <ClCompile Include="..\vendor\EASTL\source\hashtable.cpp" />
-    <ClCompile Include="..\vendor\EASTL\source\intrusive_list.cpp" />
-    <ClCompile Include="..\vendor\EASTL\source\numeric_limits.cpp" />
-    <ClCompile Include="..\vendor\EASTL\source\red_black_tree.cpp" />
-    <ClCompile Include="..\vendor\EASTL\source\string.cpp" />
-    <ClCompile Include="..\vendor\EASTL\source\thread_support.cpp" />
     <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\cRZBaseString.cpp" />
     <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\cRZBaseSystemService.cpp" />
-    <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\cRZBaseVariant.cpp" />
     <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\cRZCOMDllDirector.cpp" />
-    <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\cRZMessage2.cpp" />
-    <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\cRZMessage2Standard.cpp" />
-    <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\cS3DVector3.cpp" />
-    <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\cSCBaseProperty.cpp" />
-    <ClCompile Include="EASTLAllocator.cpp" />
     <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\SC4UI.cpp" />
-    <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\SCPropertyUtil.cpp" />
-    <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\StringResourceManager.cpp" />
     <ClCompile Include="Bridge.cpp" />
     <ClCompile Include="ChatPanel.cpp" />
-    <ClCompile Include="DebugUtil.cpp" />
     <ClCompile Include="GuardDialog.cpp" />
     <ClCompile Include="Json.cpp" />
     <ClCompile Include="Log.cpp" />
@@ -43,24 +25,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\vendor\gzcom-dll\gzcom-dll\include\cGZPersistResourceKey.h" />
-    <ClInclude Include="..\vendor\gzcom-dll\gzcom-dll\include\cIGZPersistDBRecord.h" />
-    <ClInclude Include="..\vendor\gzcom-dll\gzcom-dll\include\cIGZPersistResource.h" />
-    <ClInclude Include="..\vendor\gzcom-dll\gzcom-dll\include\cIGZPersistResourceFactory.h" />
-    <ClInclude Include="..\vendor\gzcom-dll\gzcom-dll\include\cIGZPersistResourceManager.h" />
     <ClInclude Include="..\vendor\gzcom-dll\gzcom-dll\include\cISC4App.h" />
-    <ClInclude Include="..\vendor\gzcom-dll\gzcom-dll\include\cISC4BuildingDevelopmentSimulator.h" />
-    <ClInclude Include="..\vendor\gzcom-dll\gzcom-dll\include\cISC4LotManager.h" />
-    <ClInclude Include="..\vendor\gzcom-dll\gzcom-dll\include\cISC4NetworkOccupant.h" />
-    <ClInclude Include="..\vendor\gzcom-dll\gzcom-dll\include\cISC4Occupant.h" />
-    <ClInclude Include="..\vendor\gzcom-dll\gzcom-dll\include\cISCStringDetokenizer.h" />
     <ClInclude Include="..\vendor\gzcom-dll\gzcom-dll\include\cRZCOMDllDirector.h" />
-    <ClInclude Include="..\vendor\gzcom-dll\gzcom-dll\include\cSC4EdgeConnectionStore.h" />
-    <ClInclude Include="..\vendor\gzcom-dll\gzcom-dll\include\SCPropertyUtil.h" />
-    <ClInclude Include="..\vendor\gzcom-dll\gzcom-dll\include\StringResourceKey.h" />
-    <ClInclude Include="..\vendor\gzcom-dll\gzcom-dll\include\StringResourceManager.h" />
     <ClInclude Include="Bridge.h" />
     <ClInclude Include="ChatPanel.h" />
-    <ClInclude Include="DebugUtil.h" />
     <ClInclude Include="GuardDialog.h" />
     <ClInclude Include="GZWinInterfaces.h" />
     <ClInclude Include="Json.h" />
@@ -111,20 +79,16 @@
   <PropertyGroup>
     <TargetName>sc4mp</TargetName>
   </PropertyGroup>
-  <PropertyGroup Label="Vcpkg">
-    <VcpkgEnableManifest>true</VcpkgEnableManifest>
-    <VcpkgEnabled>false</VcpkgEnabled>
-  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_WIN32_WINNT=0x0601;WINVER=0x0601;APPLICATION_ID=$(SC4_DISCORD_DLL_APP_ID_SECRET);_DEBUG;SC4BUDGETDEPARTMENTTESTING_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_WIN32_WINNT=0x0601;WINVER=0x0601;_DEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>
       </PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>..\vendor\gzcom-dll\gzcom-dll\include;..\vendor\EASTL\include;..\vendor\EABase\include\Common;.\;.\public\include;.\child-directors</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\vendor\gzcom-dll\gzcom-dll\include;.\</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <UseFullPaths>false</UseFullPaths>
@@ -146,12 +110,12 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_WIN32_WINNT=0x0601;WINVER=0x0601;APPLICATION_ID=$(SC4_DISCORD_DLL_APP_ID_SECRET);NDEBUG;SC4BUDGETDEPARTMENTTESTING_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_WIN32_WINNT=0x0601;WINVER=0x0601;NDEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>
       </PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>..\vendor\gzcom-dll\gzcom-dll\include;..\vendor\EASTL\include;..\vendor\EABase\include\Common;.\;.\public\include;.\child-directors</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\vendor\gzcom-dll\gzcom-dll\include;.\</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
