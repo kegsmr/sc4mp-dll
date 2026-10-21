@@ -135,7 +135,6 @@ private:
 		Corner,	// the bottom right corner, if that one is too tall
 	};
 
-	int32_t GetTopMargin() const;
 	void GetChipPlace(ChipSpot spot, int32_t& left, int32_t& top) const;
 	cIGZWin* GetCoveringWindow(int32_t left, int32_t top) const;
 	void AvoidCoveringWindows();
@@ -155,7 +154,7 @@ private:
 	int32_t openHeight = 0;
 	int32_t parentWidth = 0;	// the view's size when the panel was last placed in its corner
 	int32_t parentHeight = 0;
-	bool regionView = false;
+	bool regionView = false;	// in the region view, the chip and the open panel are in the bottom right corner
 	bool uiHidden = false;	// hidden with the game's UI
 	ULONGLONG lastUICheck = 0;	// in the region view, the top right corner is below its top bar
 	ChipSpot chipSpot = ChipSpot::Home;
