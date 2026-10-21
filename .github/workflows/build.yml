@@ -11,9 +11,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Only the top-level submodules are needed, and EASTL's own submodules are large
       - name: Get submodules
-        run: git submodule update --init --depth 1 vendor/gzcom-dll vendor/EASTL vendor/EABase
+        run: git submodule update --init --depth 1 vendor/gzcom-dll
 
       - uses: microsoft/setup-msbuild@v2
 
