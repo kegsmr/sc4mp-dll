@@ -1,0 +1,39 @@
+name: Release
+
+# After each successful build of main (that is, after a pull request is merged), publish its DLL as the next release: R1, R2, ...
+on:
+  workflow_run:
+    workflows: [Build]
+    types: [completed]
+    branches: [main]
+
+# One release at a time, so two quick merges don't get the same number
+concurrency:
+  group: release
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    # Not for builds started by hand
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: sc4mp-dll
+          path: sc4mp-dll
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Publish the next release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          last=$(gh api "repos/$REPO/tags" --paginate --jq '.[].name' | grep -E '^R[0-9]+$' | sed 's/^R//' | sort -n | tail -n 1)
+          next=$((${last:-0} + 1))
+          gh release create "R$next" sc4mp-dll/* --repo "$REPO" --target "$SHA" --title "Release $next" --generate-notes
