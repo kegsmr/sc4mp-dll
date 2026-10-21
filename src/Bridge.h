@@ -52,6 +52,11 @@ public:
 	using ClaimHandler = std::function<void(bool reset, const std::string& owner, const std::string& city, const std::string& path)>;
 	void SetClaimHandler(ClaimHandler handler);
 
+	// Called on the bridge thread when the launcher says the player is taking over the city saved at `path` (an expired
+	// claim, or a tile nobody claims that has another mayor's name), with the player's `mayor` name. Set it before Start().
+	using TakeoverHandler = std::function<void(const std::string& path, const std::string& mayor)>;
+	void SetTakeoverHandler(TakeoverHandler handler);
+
 	// Queues a message for the launcher, adding the current time. Messages wait in the queue
 	// while the launcher isn't connected.
 	void Send(JsonWriter message);
@@ -77,6 +82,7 @@ private:
 	ServerHandler serverHandler;
 	GuardHandler guardHandler;
 	ClaimHandler claimHandler;
+	TakeoverHandler takeoverHandler;
 	AlertHandler alertHandler;
 
 	std::mutex mutex;

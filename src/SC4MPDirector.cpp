@@ -117,6 +117,7 @@ public:
 		bridge.SetGuardHandler([this](const std::string& owner, const std::string& city, const std::string& path) { guard.Post(owner, city, path); });
 		bridge.SetAlertHandler([this](const std::string& title, const std::string& text) { guard.PostAlert(title, text); });
 		bridge.SetClaimHandler([this](bool reset, const std::string& owner, const std::string& city, const std::string& path) { guard.PostClaim(reset, owner, city, path); });
+		bridge.SetTakeoverHandler([this](const std::string& path, const std::string& mayor) { guard.PostTakeover(path, mayor); });
 
 		// In single player, only log what happens
 		if (!bridge.Start())
