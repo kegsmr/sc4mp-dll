@@ -1,6 +1,5 @@
 #pragma once
 #include "cIGZWinProc.h"
-#include "cIGZWinProcFilterW32.h"
 #include "cRZBaseSystemService.h"
 
 #include <cstdint>
@@ -20,7 +19,7 @@ class cIGZWin;
 //
 // The window is made by the game from the UI script in ui/GuardDialog.ui, like the chat panel.
 // Only Post() and PostClaim() may be called from another thread: the warning is shown on the next frame (OnTick), on the game thread.
-class GuardDialog final : public cRZBaseSystemService, private cIGZWinProc, private cIGZWinProcFilterW32
+class GuardDialog final : public cRZBaseSystemService, private cIGZWinProc
 {
 public:
 	using ParentFunction = std::function<cIGZWin*()>;
@@ -76,22 +75,16 @@ private:
 
 	bool DoWinProcMessage(cIGZWin* pWin, cGZMessage& msg) override;
 	bool DoWinMsg(cIGZWin* pWin, uint32_t dwMessageID, uint32_t data1, uint32_t data2, uint32_t data3) override;
-	LRESULT FilterMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, bool& handled) override;
 
 	void Show(const Warning& warning);
 	void TakeOver(const std::string& path, const std::string& mayor);
 	void Close();
 	bool Click(uint32_t buttonID);
-	bool HandleMouse(HWND hWnd, UINT uMsg, LPARAM lParam);
-	bool IsOnDialog(int32_t x, int32_t y) const;
-	void GetOrigin(int32_t& left, int32_t& top) const;
-	uint32_t GetButtonAt(int32_t x, int32_t y) const;
-	void StartDragging(HWND hWnd, int32_t x, int32_t y);
+	void StartDragging(int32_t x, int32_t y);
 	void Drag(int32_t x, int32_t y);
 	void StopDragging();
 	void ShowOwner(const std::string& text);
 	void SetText(uint32_t id, const std::string& text);
-	bool SetMouseFilter(bool add);
 
 	static bool IsOpenCity(const std::string& path);
 	static bool IsGameModal();
@@ -99,7 +92,6 @@ private:
 
 	ParentFunction getParent;
 	bool started = false;
-	bool mouseFilterAdded = false;
 	bool closeRequested = false;	// a button was clicked; the warning is removed on the next frame, outside the click
 	bool exitRequested = false;	// "Back to region" was clicked; the game is asked on the next frame, outside the click
 
@@ -108,8 +100,6 @@ private:
 	bool dragging = false;
 	int32_t dragX = 0;	// where the warning was grabbed, from its top left corner
 	int32_t dragY = 0;
-	HWND dragCapture = nullptr;
-	uint32_t buttonsDown = 0;	// the mouse buttons pressed on the warning, whose release is kept from the game too
 
 	std::mutex inboxMutex;
 	std::optional<Warning> pendingWarning;

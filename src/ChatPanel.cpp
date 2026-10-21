@@ -91,8 +91,9 @@ static constexpr uint8_t kNameColors[][3] = {
 };
 static constexpr int kNameColorCount = static_cast<int>(std::size(kNameColors));
 
-// The panel's buttons, of which only the shown ones can be clicked
-static constexpr uint32_t kButtonIDs[] = { kMinimizeButtonID, kChatButtonID, kChipID, kChipBubbleID, kFieldID, kNewHintTextID };	// the field is clicked to type
+// The panel's windows that are clicked like buttons but aren't the game's, so their presses come to the panel. Only the
+// shown ones can be clicked.
+static constexpr uint32_t kButtonIDs[] = { kFieldID, kNewHintTextID };	// the field is clicked to type
 
 // Windows in the title bar, shown unless the panel is minimized
 static constexpr uint32_t kTitleBarIDs[] = { kTitleID, kStatusTipID, kMinimizeButtonID };
@@ -113,7 +114,6 @@ static constexpr std::pair<const char*, uint32_t> kStatusIcons[] = {
 static constexpr size_t kLineCount = 8;
 static constexpr size_t kMaxLines = 200;			// rows kept to scroll back through, wrapped rows included
 static constexpr int kWheelRows = 3;				// rows scrolled per notch of the mouse wheel
-static constexpr int32_t kScrollArrowSize = 16;		// the game's scrollbar's arrows, at each end
 static constexpr size_t kLineLength = 44;			// characters that fit on a line, roughly, since the font isn't monospaced
 static constexpr int32_t kInputWidth = 276;			// the input's text window, less its gutters; the end of a longer message is shown while typing it
 static constexpr size_t kMaxInputLength = 200;
@@ -325,12 +325,11 @@ void ChatPanel::Attach(cIGZWin* pNewParent, bool region)
 	// Kept, so the panel can be removed from it even after the game starts tearing the view down
 	pParent = pNewParent;
 	pParent->AddRef();
-	loggedCoveredClick = false;
 
 	pWin = pNewWin;
 	pParent->ChildAdd(pWin);
 
-	// Button clicks go to the panel's window proc, which is this
+	// Button clicks and the mouse on the panel go to its window proc, which is this
 	cRZAutoRefCount<cIGZWinGen> pWinGen;
 	if (pWin->QueryInterface(kGZIID_cIGZWinGen, pWinGen.AsPPVoid()))
 	{
@@ -368,7 +367,6 @@ void ChatPanel::Detach()
 {
 	typing = false;
 	input.clear();
-	buttonsDown = 0;
 	StopDragging();
 
 	if (pWin)
@@ -501,6 +499,7 @@ bool ChatPanel::OnTick(uint32_t unknown1)
 
 	AvoidCoveringWindows();
 	FollowGameUI();
+	FollowScrollbar();
 
 	CheckSavedDialog(false);
 
@@ -526,14 +525,45 @@ bool ChatPanel::OnTick(uint32_t unknown1)
 	return true;
 }
 
+// The game's button clicks, and the mouse on the panel. What the panel handles doesn't reach the map under it, and the
+// rest (eg. drawing) is left to the game.
 bool ChatPanel::DoWinProcMessage(cIGZWin* pSender, cGZMessage& msg)
 {
-	if (msg.dwMessageType != kGZWinMessageCommand || msg.dwData1 != kGZWinCommandButtonClicked)
+	int32_t x = static_cast<int32_t>(msg.dwData1);
+	int32_t y = static_cast<int32_t>(msg.dwData2);
+
+	switch (msg.dwMessageType)
 	{
-		return false;
+	case kGZWinMessageCommand:
+		if (msg.dwData1 != kGZWinCommandButtonClicked)
+		{
+			return false;
+		}
+		return Click(msg.dwData2);	// the button's ID
+	case kGZWinMessageMouseDownL:
+		Press(x, y);
+		return true;
+	case kGZWinMessageMouseUpL:
+		StopDragging();
+		return true;
+	case kGZWinMessageMouseDownR:
+	case kGZWinMessageMouseDownM:
+	case kGZWinMessageMouseUpR:
+	case kGZWinMessageMouseUpM:
+		return true;
+	case kGZWinMessageMouseMove:
+		if (!dragging)
+		{
+			return false;	// left to the game, which shows the buttons' tooltips and hover art
+		}
+		Drag(x, y);
+		return true;
+	case kGZWinMessageMouseWheel:
+		Wheel(msg);
+		return true;
 	}
 
-	return Click(msg.dwData2);	// the button's ID
+	return false;
 }
 
 bool ChatPanel::DoWinMsg(cIGZWin* pSender, uint32_t dwMessageID, uint32_t data1, uint32_t data2, uint32_t data3)
@@ -541,7 +571,7 @@ bool ChatPanel::DoWinMsg(cIGZWin* pSender, uint32_t dwMessageID, uint32_t data1,
 	return false;
 }
 
-// Does what the button does. Called for the game's button clicks, and for the clicks FilterMessage keeps from the game.
+// Does what the button does. Called for the game's button clicks, and for presses on the panel's other buttons.
 bool ChatPanel::Click(uint32_t buttonID)
 {
 	switch (buttonID)
@@ -591,7 +621,13 @@ LRESULT ChatPanel::FilterMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 
 	if (uMsg >= WM_MOUSEFIRST && uMsg <= WM_MOUSELAST)
 	{
-		handled = HandleMouse(hWnd, uMsg, wParam, lParam);
+		// The mouse is left to the game, which gives the panel its own. A press elsewhere is only watched for: it's the
+		// player turning back to the game, so the keys go to it again, and the typed text is kept for next time.
+		bool press = uMsg == WM_LBUTTONDOWN || uMsg == WM_RBUTTONDOWN || uMsg == WM_MBUTTONDOWN;
+		if (typing && press && !IsOnPanel(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)))
+		{
+			PauseTyping();
+		}
 	}
 	else if (typing)
 	{
@@ -613,157 +649,76 @@ LRESULT ChatPanel::FilterMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 	return 0;
 }
 
-// The views pick the region tile or city lot under the cursor from the game window's own mouse messages,
-// whichever window the game's window manager then gives them to, so a click on the panel also clicked the map.
-// So the mouse buttons on the panel are taken here, before the game sees them, and the panel does the clicked button itself.
-bool ChatPanel::HandleMouse(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+// A left press on the panel, at a point from its top left corner. The game's own buttons and scrollbar take their
+// presses themselves, so these are on the rest of the panel. Done on the press rather than the release, so there's no
+// pressed button to keep track of.
+void ChatPanel::Press(int32_t x, int32_t y)
 {
-	POINT point{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-	uint32_t button = 0;
-	bool down = false;
-
-	switch (uMsg)
+	if (minimized)
 	{
-	case WM_LBUTTONDOWN:
-	case WM_LBUTTONDBLCLK:
-		button = MK_LBUTTON;
-		down = true;
-		break;
-	case WM_RBUTTONDOWN:
-	case WM_RBUTTONDBLCLK:
-		button = MK_RBUTTON;
-		down = true;
-		break;
-	case WM_MBUTTONDOWN:
-	case WM_MBUTTONDBLCLK:
-		button = MK_MBUTTON;
-		down = true;
-		break;
-	case WM_LBUTTONUP:
-		button = MK_LBUTTON;
-		break;
-	case WM_RBUTTONUP:
-		button = MK_RBUTTON;
-		break;
-	case WM_MBUTTONUP:
-		button = MK_MBUTTON;
-		break;
-	case WM_MOUSEWHEEL:
-	case WM_MOUSEHWHEEL:
-		// So the wheel doesn't zoom the map under the panel, and scrolls the chat instead. Its position is on the screen,
-		// unlike the buttons'.
-		if (!ScreenToClient(hWnd, &point) || !IsOnPanel(point.x, point.y))
-		{
-			return false;
-		}
-		if (uMsg == WM_MOUSEWHEEL && !minimized)
-		{
-			int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-			int rows = delta * kWheelRows / WHEEL_DELTA;
-			if (rows == 0 && delta > 0)
-			{
-				rows = 1;	// a touchpad's small steps
-			}
-			else if (rows == 0 && delta < 0)
-			{
-				rows = -1;
-			}
-			ScrollBy(rows);
-		}
-		return true;
-	case WM_MOUSEMOVE:
-		if (dragging)
-		{
-			Drag(point.x, point.y);
-			return true;
-		}
-		if (scrollDragging)
-		{
-			PressScrollbar(point.y, false);
-			return true;
-		}
-		return false;	// moving is left to the game, which shows the buttons' tooltips and hover art
-	default:
-		return false;
+		// The minimized panel is just the round button, so a press anywhere on it opens the panel
+		SetMinimized(false);
+		return;
 	}
 
-	if (!down)
+	uint32_t clicked = GetButtonAt(x, y);
+	if (clicked)
 	{
-		if (button == MK_LBUTTON)
-		{
-			StopDragging();
-		}
-
-		// The release goes where the press went, even if the panel has moved since (eg. the chip opened it),
-		// so neither the game nor the panel gets half a click
-		bool pressedOnPanel = (buttonsDown & button) != 0;
-		buttonsDown &= ~button;
-		return pressedOnPanel;
+		Click(clicked);
 	}
-
-	if (!IsOnPanel(point.x, point.y))
+	else
 	{
-		// A click elsewhere is the player turning back to the game, so the keys go to it again. The click still
-		// reaches the map, and the typed text is kept for next time.
-		if (typing)
-		{
-			PauseTyping();
-		}
-		return false;
+		StartDragging(x, y);
 	}
-
-	buttonsDown |= button;
-
-	// Done on the press rather than the release, so there's no pressed button to keep track of
-	if (button == MK_LBUTTON)
-	{
-		uint32_t clicked = GetButtonAt(point.x, point.y);
-
-		if (minimized)
-		{
-			// The minimized panel is just the round button, so a press anywhere on it opens the panel
-			SetMinimized(false);
-		}
-		else if (clicked)
-		{
-			Click(clicked);
-		}
-		else if (IsOnChild(kScrollbarID, point.x, point.y))
-		{
-			// The game's scrollbar never sees the press, so it's done here
-			PressScrollbar(point.y, true);
-			scrollDragging = true;
-			SetCapture(hWnd);
-			dragCapture = hWnd;
-		}
-		else
-		{
-			StartDragging(hWnd, point.x, point.y);
-		}
-	}
-
-	return true;
 }
 
-// The game's own window dragging never sees the presses taken above, so the panel is dragged by its title band here,
-// like the game's dialogs. The status icon there keeps its tooltip, so it isn't a handle.
-void ChatPanel::StartDragging(HWND hWnd, int32_t x, int32_t y)
+// Scrolls the chat, so the wheel doesn't zoom the map under the panel
+void ChatPanel::Wheel(const cGZMessage& msg)
 {
-	int32_t left = 0;
-	int32_t top = 0;
-	GetPanelOrigin(left, top);
-	if (minimized || y - top >= kTitleBandHeight || IsOnChild(kStatusTipID, x, y))
+	int32_t delta = static_cast<int32_t>(msg.dwData3);
+
+	// Once a game, since what the message holds was only seen once
+	if (!loggedWheel)
+	{
+		Log::Line("The mouse wheel on the chat panel: d1=0x" + ToHex(msg.dwData1) + " d2=0x" + ToHex(msg.dwData2) + " d3=0x" + ToHex(msg.dwData3) + " (" + std::to_string(delta) + ")");
+		loggedWheel = true;
+	}
+
+	if (minimized)
+	{
+		return;
+	}
+
+	int rows = delta * kWheelRows / WHEEL_DELTA;
+	if (rows == 0 && delta > 0)
+	{
+		rows = 1;	// a touchpad's small steps
+	}
+	else if (rows == 0 && delta < 0)
+	{
+		rows = -1;
+	}
+	ScrollBy(rows);
+}
+
+// The panel is dragged by its title band, like the game's dialogs
+void ChatPanel::StartDragging(int32_t x, int32_t y)
+{
+	if (y >= kTitleBandHeight)
 	{
 		return;
 	}
 
 	dragging = true;
-	dragX = x - left;
-	dragY = y - top;
+	dragX = x;
+	dragY = y;
 
-	// So a fast drag that leaves the game window still ends with this panel's release
-	SetCapture(hWnd);
-	dragCapture = hWnd;
+	// So the moves keep coming when a fast drag leaves the panel, and the release ends it
+	cIGZWinMgrPtr pWinMgr;
+	if (pWinMgr)
+	{
+		pWinMgr->GZSetCapture(pWin);
+	}
 }
 
 // Moves the panel to follow the mouse, keeping it inside the view, and remembers the place for the rest of the game
@@ -775,13 +730,9 @@ void ChatPanel::Drag(int32_t x, int32_t y)
 		return;
 	}
 
-	int32_t left = 0;
-	int32_t top = 0;
-	GetPanelOrigin(left, top);
-
-	// The panel's place is in its view, whose origin is the panel's in the game window less its own place
-	openLeft = x - dragX - (left - pWin->GetL());
-	openTop = y - dragY - (top - pWin->GetT());
+	// The point is from the panel's top left corner, which moves with it
+	openLeft = pWin->GetL() + x - dragX;
+	openTop = pWin->GetT() + y - dragY;
 	ClampToView(openLeft, openTop);
 	PlaceWindow(pWin, openLeft, openTop);
 	moved = true;
@@ -794,14 +745,13 @@ void ChatPanel::Drag(int32_t x, int32_t y)
 
 void ChatPanel::StopDragging()
 {
-	if (dragCapture && GetCapture() == dragCapture)
+	cIGZWinMgrPtr pWinMgr;
+	if (dragging && pWin && pWinMgr && pWinMgr->GZGetCapture() == pWin)
 	{
-		ReleaseCapture();
+		pWinMgr->GZReleaseCapture(pWin);
 	}
 
 	dragging = false;
-	scrollDragging = false;
-	dragCapture = nullptr;
 }
 
 size_t ChatPanel::GetMaxScroll() const
@@ -842,47 +792,29 @@ void ChatPanel::ScrollToBottom()
 	ShowLines();
 }
 
-// A press (or a drag, if not `press`) on the game's scrollbar at `y` in the game window: its arrows scroll a row, and its
-// track jumps to that place
-void ChatPanel::PressScrollbar(int32_t y, bool press)
+// The game's scrollbar takes its own clicks, so the chat follows when the player moves it
+void ChatPanel::FollowScrollbar()
 {
-	cIGZWin* pScrollbar = pWin->GetChildWindowFromID(kScrollbarID);
-	if (!pScrollbar)
+	if (!pWin || minimized)
 	{
 		return;
 	}
 
-	int32_t left = 0;
-	int32_t top = 0;
-	GetPanelOrigin(left, top);
-	int32_t inside = y - top - pScrollbar->GetT();
-	int32_t track = pScrollbar->GetH() - 2 * kScrollArrowSize;
-
-	if (inside < kScrollArrowSize)
-	{
-		if (press)
-		{
-			ScrollBy(1);
-		}
-		return;
-	}
-	if (inside >= pScrollbar->GetH() - kScrollArrowSize)
-	{
-		if (press)
-		{
-			ScrollBy(-1);
-		}
-		return;
-	}
-	if (track <= 0)
+	cRZAutoRefCount<cIGZWinScrollbar> pScrollbar;
+	if (!pWin->GetChildAs(kScrollbarID, kGZIID_cIGZWinScrollbar, pScrollbar.AsPPVoid()))
 	{
 		return;
 	}
 
-	// The top of the track is the oldest line
+	int32_t value = pScrollbar->GetValue();
+	if (value == scrollbarValue)
+	{
+		return;
+	}
+
+	// Its value is the top row shown (see ShowScroll), and ScrollBy sets it back if it's past the rows there are
 	int64_t maxScroll = static_cast<int64_t>(GetMaxScroll());
-	int64_t fromTop = (static_cast<int64_t>(inside - kScrollArrowSize) * maxScroll + track / 2) / track;
-	ScrollBy(static_cast<int>(maxScroll - fromTop - static_cast<int64_t>(scrollRows)));
+	ScrollBy(static_cast<int>(maxScroll - value - static_cast<int64_t>(scrollRows)));
 }
 
 // Sets the game's scrollbar to the shown lines, and the hint for new lines below them
@@ -904,6 +836,7 @@ void ChatPanel::ShowScroll(bool open)
 		pScrollbar->SetMinMax(0, maxScroll);
 		pScrollbar->SetPageSize(static_cast<int32_t>(kLineCount));
 		pScrollbar->SetValue(value);
+		scrollbarValue = pScrollbar->GetValue();	// as the scrollbar keeps it
 	}
 	SetChildVisible(kScrollbarID, open);
 
@@ -941,65 +874,13 @@ void ChatPanel::ClampToView(int32_t& left, int32_t& top) const
 	}
 }
 
-// Whether a point in the game window (where the mouse messages are) is on the panel, and the panel is on top there
-bool ChatPanel::IsOnPanel(int32_t x, int32_t y)
+// Whether a point in the game window (where its Win32 mouse messages are) is on the panel
+bool ChatPanel::IsOnPanel(int32_t x, int32_t y) const
 {
-	cIGZWinMgrPtr pWinMgr;
-	if (pWinMgr && pWinMgr->IsModal())
-	{
-		return false;	// a dialog has the mouse
-	}
-
 	int32_t left = 0;
 	int32_t top = 0;
 	GetPanelOrigin(left, top);
-	if (x < left || y < top || x >= left + pWin->GetW() || y >= top + pWin->GetH())
-	{
-		return false;
-	}
-
-	// Another of the game's windows may be over the panel, eg. a query window dragged there, and it keeps its clicks.
-	// If the window manager can't say, the panel takes the click.
-	cIGZWin* pHit = nullptr;
-	if (pWinMgr)
-	{
-		pHit = pWinMgr->GetWindowFromPoint(x, y);
-	}
-
-	if (!pHit)
-	{
-		return true;
-	}
-
-	cIGZWin* pTop = nullptr;	// the view's child the hit is in
-	for (int depth = 0; pHit && depth < kMaxWinDepth; depth++)
-	{
-		if (pHit == pWin)
-		{
-			return true;
-		}
-		if (pHit->GetParentWin() == pParent)
-		{
-			pTop = pHit;
-		}
-		pHit = pHit->GetParentWin();
-	}
-
-	// A layer as big as the view (eg. one the region view adds over the panel after it) isn't a window over the
-	// panel, so the panel still takes the click, as it's drawn there
-	if (!pTop || (pTop->GetW() >= pParent->GetW() && pTop->GetH() >= pParent->GetH()))
-	{
-		return true;
-	}
-
-	// Logged once, since it also happens if the window manager's coordinates aren't the game window's
-	if (!loggedCoveredClick)
-	{
-		Log::Line("A click on the chat panel went to another of the game's windows over it (ID 0x" + ToHex(pTop->GetID()) + ", " + std::to_string(pTop->GetW()) + "x" + std::to_string(pTop->GetH()) + ")");
-		loggedCoveredClick = true;
-	}
-
-	return false;
+	return x >= left && y >= top && x < left + pWin->GetW() && y < top + pWin->GetH();
 }
 
 // Where the panel is in the game window. Its own place is in its view's window, which is in its parent's, and so on.
@@ -1017,7 +898,7 @@ void ChatPanel::GetPanelOrigin(int32_t& left, int32_t& top) const
 	}
 }
 
-// Returns the ID of the shown button at a point in the game window, or 0 if there's none
+// Returns the ID of the shown button (in kButtonIDs) at a point from the panel's top left corner, or 0 if there's none
 uint32_t ChatPanel::GetButtonAt(int32_t x, int32_t y) const
 {
 	for (uint32_t id : kButtonIDs)
@@ -1253,15 +1134,9 @@ void ChatPanel::CloseSavedDialog()
 	PostMessageW(gameWindow, WM_LBUTTONUP, 0, MAKELPARAM(okX, okY));
 }
 
-// Whether a point in the game window is on one of the panel's shown windows
+// Whether a point from the panel's top left corner is on one of its shown windows
 bool ChatPanel::IsOnChild(uint32_t id, int32_t x, int32_t y) const
 {
-	int32_t left = 0;
-	int32_t top = 0;
-	GetPanelOrigin(left, top);
-	x -= left;
-	y -= top;
-
 	cIGZWin* pChild = pWin->GetChildWindowFromID(id);
 	return pChild && pChild->IsVisible()
 		&& x >= pChild->GetL() && y >= pChild->GetT() && x < pChild->GetL() + pChild->GetW() && y < pChild->GetT() + pChild->GetH();
@@ -1578,7 +1453,11 @@ void ChatPanel::AddLine(const Notice& notice)
 void ChatPanel::SetMinimized(bool value)
 {
 	minimized = value;
-	if (!minimized)
+	if (minimized)
+	{
+		StopDragging();
+	}
+	else
 	{
 		unread = 0;
 		scrollRows = 0;	// reopened at the newest lines
