@@ -39,7 +39,6 @@ INDIGO = (60, 70, 190)
 FIELD_SIZE = (290, 26)
 FIELD_MIDDLE_WIDTH = 640	# at least the field's width in the widest panel (kMaxWidth in ChatPanel.cpp)
 FIELD_END_WIDTH = 8
-GRIP_SIZE = 16
 CHIP_BUTTON_SIZE = 50
 HINT_SIZE = (84, 18)
 STATUS_SIZE = 14
@@ -183,30 +182,6 @@ def draw_field_end(active, right):
 	return field.crop((0, 0, FIELD_END_WIDTH, field.height))
 
 
-def draw_grip(right):
-	"""Draws a resize grip for a bottom corner of the panel: three grooves across the steel frame's rounded corner
-	({46a006b0,144161ee}, whose corners the game draws at their own size), each a dark line with a light one below it."""
-
-	size = GRIP_SIZE
-	image = Image.new("RGBA", (size * SCALE, size * SCALE))
-	draw = ImageDraw.Draw(image)
-	for s in (13, 16, 19):
-		draw.line([(s * SCALE, 0), (0, s * SCALE)], fill=OUTLINE + (255,), width=SCALE)
-		draw.line([((s + 1) * SCALE, 0), (0, (s + 1) * SCALE)], fill=(232, 238, 242, 255), width=SCALE)
-
-	# Kept inside the frame's rounded corner, which is about a circle of 12 pixels around (3, 3), and on its rim
-	mask = Image.new("L", image.size, 0)
-	ImageDraw.Draw(mask).ellipse(scaled(3 - 11, 3 - 11, 3 + 11, 3 + 11), fill=255)
-	ImageDraw.Draw(mask).rectangle(scaled(0, 0, 3, size), fill=255)
-	ImageDraw.Draw(mask).rectangle(scaled(0, 0, size, 3), fill=255)
-	image.putalpha(Image.composite(image.getchannel("A"), mask, mask))
-
-	image = finish(image)
-	if not right:
-		image = image.transpose(Image.FLIP_LEFT_RIGHT)
-	return image
-
-
 def draw_status_tip():
 	"""Draws a see-through button the size of a status icon, in four frames, which is over the icon for its tooltip."""
 
@@ -303,8 +278,6 @@ def make_images():
 		"chat-field-right.png": draw_field_end(active=False, right=True),
 		"chat-field-typing-left.png": draw_field_end(active=True, right=False),
 		"chat-field-typing-right.png": draw_field_end(active=True, right=True),
-		"chat-grip-left.png": draw_grip(right=False),
-		"chat-grip-right.png": draw_grip(right=True),
 		"chat-minimize.png": draw_title_button(minus_bar),
 		"chat-chip.png": draw_round_button(),
 		"chat-count.png": draw_count_bubble(),

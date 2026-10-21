@@ -18,7 +18,7 @@ class cIGZWin;
 // player presses Enter (or clicks the send button) to type a message, Enter again to send it and Esc to cancel.
 // The title bar shows the server's name and the launcher's save status. The panel can be minimized to a small button
 // in the bottom right corner, which it starts as. The choice is kept while the game runs. The open panel can be dragged by its
-// title band and resized by the grips in its bottom corners, and its place and size are kept while the game runs too.
+// title band and resized by its bottom corners, and its place and size are kept while the game runs too.
 //
 // The window is made by the game from the UI script in ui/ChatPanel.ui, so it looks like the game's own.
 // Only Post() may be called from another thread: it queues the line, and the queue is emptied every
@@ -180,10 +180,10 @@ private:
 	int32_t layoutWidth = 0;	// the open panel's size that its windows are laid out for, from the UI script's until FitChildren
 	int32_t layoutHeight = 0;
 	bool resizing = false;
-	bool resizingLeft = false;	// by the bottom left grip, which moves the left edge, or else the bottom right one
-	int32_t resizeX = 0;	// where the grip was pressed, in the view
+	bool resizingLeft = false;	// by the bottom left corner, which moves the left edge, or else the bottom right one
+	int32_t resizeX = 0;	// where the corner was pressed, in the view
 	int32_t resizeY = 0;
-	int32_t resizeLeft = 0;	// the open panel when the grip was pressed
+	int32_t resizeLeft = 0;	// the open panel when the corner was pressed
 	int32_t resizeWidth = 0;
 	int32_t resizeHeight = 0;
 	size_t resizeLineCount = 0;

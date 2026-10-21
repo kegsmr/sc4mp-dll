@@ -41,8 +41,6 @@ static constexpr uint32_t kFieldLeftID = 0x7B3E9A64;	// the field's rounded ends
 static constexpr uint32_t kFieldRightID = 0x7B3E9A65;
 static constexpr uint32_t kTypingFieldLeftID = 0x7B3E9A6E;
 static constexpr uint32_t kTypingFieldRightID = 0x7B3E9A6F;
-static constexpr uint32_t kLeftGripID = 0x7B3E9A62;		// the resize grips in the bottom corners
-static constexpr uint32_t kRightGripID = 0x7B3E9A63;
 static constexpr uint32_t kFirstLineID = 0x7B3E9A70;
 static constexpr uint32_t kFirstInfoLineID = 0x7B3E9AB0;	// the same lines in grey, for lines that aren't chat
 static constexpr uint32_t kFirstNameID = 0x7B3E9B00;		// a window for each line and name color, at kFirstNameID + line * kNameLineStep + color
@@ -64,6 +62,7 @@ static constexpr uint32_t kChipIconOffset = 0x10;	// each status ring on the chi
 static constexpr int32_t kChipWidth = 56;	// the 50 pixel button, with room for the count bubble over its top right
 static constexpr int32_t kChipHeight = 56;
 static constexpr int32_t kTitleBandHeight = 34;	// the frame's title band, by which the panel is dragged
+static constexpr int32_t kResizeCorner = 16;		// how far into a bottom corner a press resizes the panel, instead of dragging it
 static constexpr int32_t kRightMargin = 12;			// the chip and the open panel are in the view's top right corner
 static constexpr int32_t kTopMargin = 16;			// in the city view, whose corner is free
 static constexpr int32_t kChipBottomMargin = 48;	// above the city view's news ticker, and the region view's bottom bar
@@ -104,8 +103,8 @@ static constexpr uint32_t kButtonIDs[] = { kFieldID, kNewHintTextID };	// the fi
 // How the panel's windows follow its size (see FitChildren). The rows' windows are stretched with the title, and the status
 // icons move with the title bar's buttons.
 static constexpr uint32_t kRightEdgeIDs[] = { kStatusTipID, kMinimizeButtonID, kScrollbarID };
-static constexpr uint32_t kBottomEdgeIDs[] = { kFieldID, kTypingFieldID, kFieldLeftID, kTypingFieldLeftID, kInputID, kLeftGripID };
-static constexpr uint32_t kCornerIDs[] = { kFieldRightID, kTypingFieldRightID, kChatButtonID, kNewHintID, kNewHintTextID, kRightGripID };
+static constexpr uint32_t kBottomEdgeIDs[] = { kFieldID, kTypingFieldID, kFieldLeftID, kTypingFieldLeftID, kInputID };
+static constexpr uint32_t kCornerIDs[] = { kFieldRightID, kTypingFieldRightID, kChatButtonID, kNewHintID, kNewHintTextID };
 static constexpr uint32_t kWideIDs[] = { kTitleID, kFieldID, kTypingFieldID, kInputID };
 
 // Windows in the title bar, shown unless the panel is minimized
@@ -698,11 +697,11 @@ void ChatPanel::Press(int32_t x, int32_t y)
 	{
 		Click(clicked);
 	}
-	else if (IsOnChild(kLeftGripID, x, y))
+	else if (y >= openHeight - kResizeCorner && x < kResizeCorner)
 	{
 		StartResizing(x, y, true);
 	}
-	else if (IsOnChild(kRightGripID, x, y))
+	else if (y >= openHeight - kResizeCorner && x >= openWidth - kResizeCorner)
 	{
 		StartResizing(x, y, false);
 	}
@@ -797,7 +796,7 @@ void ChatPanel::StopDragging()
 	resizing = false;
 }
 
-// The panel is resized by the grips in its bottom corners, from a press on one at a point from its top left corner
+// The panel is resized by its bottom corners, from a press on one at a point from its top left corner
 void ChatPanel::StartResizing(int32_t x, int32_t y, bool left)
 {
 	resizing = true;
@@ -817,7 +816,7 @@ void ChatPanel::StartResizing(int32_t x, int32_t y, bool left)
 	}
 }
 
-// Resizes the panel to follow the mouse. The grip's corner follows it, and the opposite edges stay put. The height
+// Resizes the panel to follow the mouse. The pressed corner follows it, and the opposite edges stay put. The height
 // is whole rows, the panel is kept inside the view, and the size is kept for the rest of the game.
 void ChatPanel::Resize(int32_t x, int32_t y)
 {
@@ -1659,8 +1658,6 @@ void ChatPanel::Layout()
 	FitChildren();
 	ShowLines();
 	SetChildVisible(kBackgroundID, open);
-	SetChildVisible(kLeftGripID, open);
-	SetChildVisible(kRightGripID, open);
 	SetChildVisible(kInputID, open);
 	SetChildVisible(kChatButtonID, open);
 	for (uint32_t id : kTitleBarIDs)
