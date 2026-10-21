@@ -124,6 +124,7 @@ static constexpr int32_t kTitleFontScale = 9;		// the title's font (DataInsetHea
 static constexpr size_t kNameLength = 20;			// a longer player name is shortened
 static constexpr int32_t kNameGap = 4;				// between a player's name and their message
 
+static int InputExperiment();
 static constexpr uint32_t kGZWinMessageCommand = 3;
 static constexpr uint32_t kGZWinCommandButtonClicked = 0x287259F6;
 static constexpr LPARAM kKeyRepeatFlag = 1 << 30;
@@ -411,6 +412,13 @@ void ChatPanel::StartTyping()
 	typing = true;
 	ResetCaret();
 	ShowInput();
+
+	if (InputExperiment() == 4)
+	{
+		cIGZWinMgrPtr pWinMgr;
+		bool focused = pWinMgr && pWinMgr->GZSetFocus(pWin);
+		Log::Line(std::string("EXPERIMENT: GZSetFocus on the panel ") + (focused ? "worked" : "failed"));
+	}
 }
 
 void ChatPanel::Post(const std::string& text, bool history, const std::string& name, const std::string& color, bool own)
@@ -549,6 +557,10 @@ static int InputExperiment()
 		{
 			mode = 3;
 		}
+		else if (strcmp(value, "focus") == 0)
+		{
+			mode = 4;
+		}
 		Log::Line(std::string("Input experiment mode: ") + value);
 	}
 	return mode;
@@ -661,7 +673,7 @@ LRESULT ChatPanel::FilterMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 	{
 		handled = HandleMouse(hWnd, uMsg, wParam, lParam);
 	}
-	else if (typing)
+	else if (typing && InputExperiment() != 4)
 	{
 		handled = HandleTypingKey(hWnd, uMsg, wParam, lParam);
 	}
