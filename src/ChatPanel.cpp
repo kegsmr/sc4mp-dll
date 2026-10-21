@@ -1086,8 +1086,14 @@ void ChatPanel::CloseSavedDialog()
 			}
 			pHit = pHit->GetParentWin();
 		}
+
+		// The chat panel may be there too, if the player dragged it over the middle, so the search goes on under it
+		if (pDialog == pWin)
+		{
+			pDialog = nullptr;
+		}
 	}
-	if (!pDialog || pDialog == pWin)
+	if (!pDialog)
 	{
 		return;
 	}
