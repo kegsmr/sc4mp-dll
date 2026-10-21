@@ -1,7 +1,7 @@
 #pragma once
 #include "cIGZUnknown.h"
 
-// The few UI interfaces that the pinned gzcom-dll doesn't have. Only the first methods are declared,
+// The few interfaces that the pinned gzcom-dll doesn't have. Only the first methods are declared,
 // since a declared method must sit at the same vtable slot as in the game, and the rest are unused.
 // The interface IDs and method order were taken from sc4-region-census, which uses them in a released plugin.
 //
@@ -36,4 +36,42 @@ class cIGZWinText : public cIGZUnknown
 public:
 	virtual cIGZWin* AsIGZWin() = 0;
 	virtual bool SetCaption(cIGZString const& caption) = 0;
+};
+
+static const uint32_t kGZIID_cIGZWinScrollbar = 0x61325A2D;
+
+// The game's scrollbar, whose range and value the chat panel sets. Only the methods up to SetPageSize are declared, in
+// the order of the current gzcom-dll's cIGZWinScrollbar.h.
+class cIGZWinScrollbar : public cIGZUnknown
+{
+public:
+	virtual cIGZWin* AsIGZWin() = 0;
+	virtual void* AsIGZWinSlider() = 0;
+	virtual bool SetValue(int32_t value) = 0;
+	virtual int32_t GetValue() const = 0;
+	virtual bool SetMinMax(int32_t min, int32_t max) = 0;
+	virtual bool GetMinMax(int32_t& min, int32_t& max) const = 0;
+	virtual bool SetOrientation(int32_t orientation) = 0;
+	virtual int32_t GetOrientation() const = 0;
+	virtual bool SetPageSize(int32_t value) = 0;
+};
+
+// The city's vehicle, aircraft and watercraft managers, which the pinned cISC4City returns as plain pointers. Only the
+// methods up to IsDrivingMode are declared, in the order of the current gzcom-dll's cISC4AutomataManager.h.
+class cISC4AutomataManager : public cIGZUnknown
+{
+public:
+	virtual bool Init() = 0;
+	virtual bool Shutdown() = 0;
+	virtual bool Activate(bool active) = 0;
+	virtual bool IsActive() const = 0;
+	virtual bool AddAutomaton(void* pAutomaton) = 0;
+	virtual bool RemoveAutomaton(void* pAutomaton, bool unknown) = 0;
+	virtual void Pause() = 0;
+	virtual void Resume() = 0;
+	virtual bool IsPaused() const = 0;
+	virtual uint32_t GetAutomataCount() const = 0;
+
+	// Whether the player is driving one of its automata with U-Drive-It
+	virtual bool IsDrivingMode() const = 0;
 };

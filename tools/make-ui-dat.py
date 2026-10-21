@@ -14,24 +14,28 @@ from pathlib import Path
 # File name in `ui` -> (group, instance). These must match the keys in the DLL's source.
 UI_FILES = {
 	"ChatPanel.ui": (0xC0E6A1C5, 0x1A9F3B21),
+	"GuardDialog.ui": (0xC0E6A1C5, 0x5D2C7E43),
+	"AlertDialog.ui": (0xC0E6A1C5, 0x5D2C7E44),
 }
 
 UI_TYPE = 0x00000000
 
 # File name in `ui/images` -> instance. They're PNGs in the game's UI image group. The instances are random, so they
 # don't clash with the game's, the launcher's (0x14416302, 0x14416312, 0x14416314, 0xEA7F0EAE) or other plugins' images.
+# The panel frames and most buttons are the game's own images, which the scripts use by their keys, so they aren't here.
 IMAGE_FILES = {
-	"chat-panel.png": 0x5417738C,
-	"chat-panel-collapsed.png": 0x6E45DC90,
 	"chat-field.png": 0xF9C0707C,
 	"chat-field-typing.png": 0x62225A7B,
-	"chat-hide.png": 0xE4A1CC50,
-	"chat-show.png": 0x47A9D6D8,
-	"chat-send.png": 0x908BA8F4,
 	"chat-minimize.png": 0x391B92E8,
 	"chat-chip.png": 0x3B71C9C9,
-	"chat-badge.png": 0xD1AA828D,
-	"status-pill.png": 0xD5EB56FA,
+	"chat-count.png": 0x4D2E7A26,
+	"chat-hint.png": 0x4D2E7A27,
+	"ring-green.png": 0x4D2E7A21,
+	"ring-blue.png": 0x4D2E7A22,
+	"ring-amber.png": 0x4D2E7A23,
+	"ring-red.png": 0x4D2E7A24,
+	"ring-grey.png": 0x4D2E7A25,
+	"status-tip.png": 0x5C3B8E21,
 	"status-saved.png": 0xEB0C124A,
 	"status-saving.png": 0x8ED6ED86,
 	"status-failed.png": 0x8E5FC42E,

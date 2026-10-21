@@ -3,6 +3,10 @@
 The PNGs are committed, so building the .dat doesn't need Pillow. Run this after changing the drawing, then run `make-ui-dat.py`.
 Everything is drawn at 4x and scaled down, which smooths the edges like the game's own images.
 
+The panels, buttons and fonts are the game's own, referenced by key in the UI scripts (eg. the steel frame
+{46a006b0,144161ee} and the caption button {46a006b0,144161eb}), so they look like the rest of SimCity 4 and aren't
+redistributed. Only what the game has no image for is drawn here, in the game's colours.
+
 Backgrounds are drawn at the exact size of their window in ui/ChatPanel.ui, so they look the same however the game
 blits them. Button images are strips of four frames, like the game's: disabled, normal, pressed and hover.
 
@@ -16,18 +20,16 @@ from PIL import Image, ImageDraw, ImageFilter
 
 SCALE = 4
 
-# Pale steel panels with a navy title strip, like SC4's info panels
-PANEL_TOP = (206, 214, 230)
-PANEL_BOTTOM = (176, 188, 210)
-PANEL_ALPHA = 235	# a little see-through
+# The game's UI colours, from its panel frames ({46a006b0,144161ee}) and its text (forecolor in its UI scripts)
+OUTLINE = (57, 68, 114)
+STEEL = (156, 178, 194)
+INSET = (218, 224, 229)
+TEXT = (63, 73, 103)
+
+# For the region tile badges
 EDGE_DARK = (70, 84, 120)
 EDGE_LIGHT = (240, 244, 252)
-TITLE_TOP = (88, 108, 156)
-TITLE_BOTTOM = (54, 70, 112)
-INSET = (232, 236, 245)
-INSET_EDGE = (120, 134, 168)
 NAVY = (32, 40, 80)
-FOCUS = (52, 120, 220)
 
 # Status colours, matching the launcher's overlay (resources/overlay-*.png in sc4mp-client)
 GREEN = (46, 160, 67)
@@ -43,15 +45,31 @@ TILE_CLAIMED = (179, 196, 208)
 TILE_UNCLAIMED = (92, 151, 190)
 
 # The layout, which must match ui/ChatPanel.ui
-PANEL_WIDTH = 360
-PANEL_HEIGHT = 228
-TITLE_HEIGHT = 36	# the collapsed panel
-SHADOW = 6	# room right of and below the panel for its shadow
-HISTORY = (8, 38, 352, 190)
-FIELD_SIZE = (308, 26)
-PILL_SIZE = (120, 20)
+FIELD_SIZE = (290, 26)
+CHIP_BUTTON_SIZE = 50
+HINT_SIZE = (84, 18)
+STATUS_SIZE = 14
+TITLE_BUTTON_SIZE = (22, 20)	# like the game's
 
 STATES = ("disabled", "normal", "pressed", "hover")
+
+# The saving icon's hourglass on its 14 pixel disc: bars at the top and bottom, and two triangles meeting at a narrow waist
+HOURGLASS = (
+	"..............",
+	"..............",
+	"..............",
+	"....######....",
+	"....######....",
+	".....####.....",
+	"......##......",
+	"......##......",
+	".....####.....",
+	"....######....",
+	"....######....",
+	"..............",
+	"..............",
+	"..............",
+)
 
 
 def scaled(*values):
@@ -92,99 +110,134 @@ def finish(image):
 	return image.resize((image.width // SCALE, image.height // SCALE), Image.LANCZOS)
 
 
-def draw_panel(height, history):
-	"""Draws the panel with its shadow and title strip, and the sunken box behind the chat lines if `history`."""
+def draw_round_button():
+	"""Draws the minimized panel's round button in four frames, at 50 pixels, in the style of the game's round buttons (eg.
+	{46a006b0,cbcb6e9b}, which is 88 pixels and can't be scaled in game): a navy disc in a silver ring, with a soft shadow.
+	The status ring, the speech bubble and the unread count are windows on top."""
 
-	image = Image.new("RGBA", ((PANEL_WIDTH + SHADOW) * SCALE, (height + SHADOW) * SCALE))
+	size = CHIP_BUTTON_SIZE
+	discs = {"disabled": ((120, 124, 134), (96, 100, 110)), "normal": ((84, 104, 160), (58, 74, 119)), "pressed": ((58, 74, 119), (70, 89, 143)), "hover": ((104, 126, 186), (70, 89, 143))}
 
-	shadow = Image.new("RGBA", image.size)
-	ImageDraw.Draw(shadow).rounded_rectangle(scaled(3, 4, PANEL_WIDTH + 2, height + 3), 10 * SCALE, fill=(0, 0, 0, 110))
-	image.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(3 * SCALE)))
+	strip = Image.new("RGBA", (size * len(STATES), size))
+	for i, state in enumerate(STATES):
+		top, bottom = discs[state]
+		frame = Image.new("RGBA", (size * SCALE, size * SCALE))
 
-	image.alpha_composite(bevel_box(PANEL_WIDTH, height, PANEL_TOP, PANEL_BOTTOM, 10, PANEL_ALPHA), (0, 0))
-	image.alpha_composite(bevel_box(PANEL_WIDTH - 8, 28, TITLE_TOP, TITLE_BOTTOM, 7), (4 * SCALE, 4 * SCALE))
+		# Pressed, it sinks onto its shadow
+		drop = 0
+		if state == "pressed":
+			drop = 1
+		else:
+			shadow = Image.new("RGBA", frame.size)
+			ImageDraw.Draw(shadow).ellipse(scaled(3, 4, size - 2, size - 1), fill=(0, 0, 0, 110))
+			frame.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(1.5 * SCALE)))
 
-	if history:
-		left, top, right, bottom = HISTORY
-		ImageDraw.Draw(image).rounded_rectangle(scaled(left, top, right - 1, bottom - 1), 6 * SCALE, fill=INSET + (240,), outline=INSET_EDGE + (255,), width=SCALE)
+		# The silver ring, lit from the top left
+		ring = gradient(frame.size, (247, 255, 255), (150, 160, 172))
+		mask = Image.new("L", frame.size, 0)
+		ImageDraw.Draw(mask).ellipse(scaled(1, 1 + drop, size - 3, size - 3 + drop), fill=255)
+		ring.putalpha(mask)
+		frame.alpha_composite(ring)
+		draw = ImageDraw.Draw(frame)
+		draw.ellipse(scaled(1, 1 + drop, size - 3, size - 3 + drop), outline=(32, 41, 66, 255), width=SCALE)
 
+		# The navy disc, darker at its top edge like the game's
+		disc = gradient(frame.size, top, bottom)
+		mask = Image.new("L", frame.size, 0)
+		ImageDraw.Draw(mask).ellipse(scaled(5, 5 + drop, size - 7, size - 7 + drop), fill=255)
+		disc.putalpha(mask)
+		frame.alpha_composite(disc)
+		draw.ellipse(scaled(5, 5 + drop, size - 7, size - 7 + drop), outline=(32, 41, 66, 255), width=SCALE)
+		strip.paste(finish(frame), (i * size, 0))
+	return strip
+
+
+def draw_ring(colour):
+	"""Draws the round button's status ring, inside its silver one, in a status colour."""
+
+	size = CHIP_BUTTON_SIZE
+	image = Image.new("RGBA", (size * SCALE, size * SCALE))
+	ImageDraw.Draw(image).ellipse(scaled(5, 5, size - 7, size - 7), outline=colour + (255,), width=3 * SCALE)
+	return finish(image)
+
+
+def draw_count_bubble():
+	"""Draws the red bubble for the chip's unread count, which is a text window on top of it."""
+
+	size = 20
+	image = Image.new("RGBA", (size * SCALE, size * SCALE))
+	ImageDraw.Draw(image).ellipse(scaled(0, 0, size - 1, size - 1), fill=RED + (255,), outline=OUTLINE + (255,), width=SCALE)
 	return finish(image)
 
 
 def draw_field(active):
-	"""Draws the text field, white with a blue outline while the player types."""
+	"""Draws the text field, sunken like the game's insets, and white while the player types."""
 
 	width, height = FIELD_SIZE
-	image = Image.new("RGBA", (width * SCALE, height * SCALE))
+	fill = INSET + (255,)
 	if active:
-		ImageDraw.Draw(image).rounded_rectangle(scaled(0, 0, width - 1, height - 1), 6 * SCALE, fill=(255, 255, 255, 250), outline=FOCUS + (255,), width=2 * SCALE)
+		fill = (255, 255, 255, 255)
+
+	image = Image.new("RGBA", (width * SCALE, height * SCALE))
+	draw = ImageDraw.Draw(image)
+	draw.rounded_rectangle(scaled(0, 0, width - 1, height - 1), 4 * SCALE, fill=fill, outline=OUTLINE + (255,), width=SCALE)
+	if active:
+		draw.rounded_rectangle(scaled(1, 1, width - 2, height - 2), 3 * SCALE, outline=TEXT + (255,), width=SCALE)
 	else:
-		ImageDraw.Draw(image).rounded_rectangle(scaled(0, 0, width - 1, height - 1), 6 * SCALE, fill=INSET + (230,), outline=INSET_EDGE + (255,), width=SCALE)
+		draw.line(scaled(3, 1.5, width - 4, 1.5), fill=STEEL + (255,), width=SCALE)	# a shadow under the top edge, so it looks sunken
 	return finish(image)
 
 
-def draw_pill():
-	"""Draws the white pill behind the save status. The icon and text are separate windows on top of it."""
+def draw_status_tip():
+	"""Draws a see-through button the size of a status icon, in four frames, which is over the icon for its tooltip."""
 
-	width, height = PILL_SIZE
+	return Image.new("RGBA", (STATUS_SIZE * len(STATES), STATUS_SIZE))
+
+
+def draw_hint():
+	"""Draws the small inset behind the "N new below" hint, shown while the player has scrolled up."""
+
+	width, height = HINT_SIZE
 	image = Image.new("RGBA", (width * SCALE, height * SCALE))
-	ImageDraw.Draw(image).rounded_rectangle(scaled(0, 0, width - 1, height - 1), height / 2 * SCALE, fill=(255, 255, 255, 235), outline=INSET_EDGE + (255,), width=SCALE)
+	ImageDraw.Draw(image).rounded_rectangle(scaled(0, 0, width - 1, height - 1), 4 * SCALE, fill=INSET + (255,), outline=OUTLINE + (255,), width=SCALE)
 	return finish(image)
 
 
-def draw_badge():
-	"""Draws the red pill for the unread count, which is a text window on top of it."""
+def draw_title_button(draw_icon):
+	"""Draws a small title bar button's four frames, like the game's up, down and close buttons ({46a006b0,144161e0},
+	144161e2 and 144161f9): a light rim around a see-through dark square, with a light icon. `draw_icon(draw, cx, cy, colour)`
+	draws the icon at 4x."""
 
-	width, height = 22, 15
-	image = Image.new("RGBA", (width * SCALE, height * SCALE))
-	ImageDraw.Draw(image).rounded_rectangle(scaled(0, 0, width - 1, height - 1), 7.5 * SCALE, fill=(222, 70, 60, 255), outline=(150, 30, 24, 255), width=SCALE)
-	return finish(image)
-
-
-def draw_button(width, height, draw_icon, radius=6):
-	"""Draws a button's four frames side by side. `draw_icon(draw, cx, cy, colour)` draws its icon at 4x."""
+	width, height = TITLE_BUTTON_SIZE
+	rims = {"disabled": (194, 194, 194), "normal": (222, 232, 227), "pressed": (255, 255, 255), "hover": (255, 255, 255)}
 
 	strip = Image.new("RGBA", (width * len(STATES), height))
 	for i, state in enumerate(STATES):
-		top, bottom, colour = (238, 241, 248), (196, 204, 222), NAVY
-		if state == "disabled":
-			top, bottom, colour = (220, 222, 226), (190, 193, 200), (150, 154, 164)
-		elif state == "pressed":
-			top, bottom = (184, 194, 214), (220, 226, 238)	# lit from below, so it looks pushed in
-		elif state == "hover":
-			top, bottom = (252, 253, 255), (212, 222, 242)
+		rim = rims[state] + (255,)
+		frame = Image.new("RGBA", (width * SCALE, height * SCALE))
 
-		frame = bevel_box(width, height, top, bottom, radius)
-		if state == "hover":
-			ImageDraw.Draw(frame).rounded_rectangle(scaled(1, 1, width - 2, height - 2), (radius - 1) * SCALE, outline=FOCUS + (200,), width=SCALE)
+		# Pressed, it drops a pixel onto its shadow
+		drop = 0
+		inside = (0, 0, 0, 120)
+		if state == "pressed":
+			drop = 1
+			inside = (0, 0, 0, 30)
+		else:
+			shadow = Image.new("RGBA", frame.size)
+			ImageDraw.Draw(shadow).rounded_rectangle(scaled(2, 2, 19, 18), 3 * SCALE, fill=(0, 0, 0, 90))
+			frame.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(SCALE)))
 
-		shift = SCALE if state == "pressed" else 0	# the icon sinks with the button
-		draw_icon(ImageDraw.Draw(frame), width * SCALE / 2 + shift, height * SCALE / 2 + shift, colour + (255,))
+		draw = ImageDraw.Draw(frame)
+		draw.rounded_rectangle(scaled(1, drop, 17.75, 15.75 + drop), 3 * SCALE, fill=inside, outline=rim, width=2 * SCALE)
+		draw_icon(draw, 9.5 * SCALE, (8 + drop) * SCALE, rim)
 		strip.paste(finish(frame), (i * width, 0))
 	return strip
 
 
-def chevron(up):
-	def draw_icon(draw, cx, cy, colour):
-		h = 3 * SCALE if up else -3 * SCALE
-		draw.line([(cx - 6 * SCALE, cy + h), (cx, cy - h), (cx + 6 * SCALE, cy + h)], fill=colour, width=2 * SCALE, joint="curve")
-	return draw_icon
+def minus_bar(draw, cx, cy, colour):
+	"""A minus, for minimizing the panel to its round button."""
 
-
-def minimize_arrow(draw, cx, cy, colour):
-	"""An arrow into the bottom right corner, where the minimized panel goes."""
-
-	draw.line([(cx - 5 * SCALE, cy - 5 * SCALE), (cx + 3 * SCALE, cy + 3 * SCALE)], fill=colour, width=2 * SCALE)
-	draw.polygon([(cx + 5 * SCALE, cy + 5 * SCALE), (cx - 2 * SCALE, cy + 5 * SCALE), (cx + 5 * SCALE, cy - 2 * SCALE)], fill=colour)
-	draw.line([(cx - 7 * SCALE, cy + 7 * SCALE), (cx + 7 * SCALE, cy + 7 * SCALE)], fill=colour, width=SCALE)
-
-
-def no_icon(draw, cx, cy, colour):
-	pass
-
-
-def send_arrow(draw, cx, cy, colour):
-	draw.polygon([(cx - 7 * SCALE, cy - 6 * SCALE), (cx + 8 * SCALE, cy), (cx - 7 * SCALE, cy + 6 * SCALE), (cx - 3 * SCALE, cy)], fill=colour)
+	draw.rectangle([cx - 4.5 * SCALE, cy - 1 * SCALE, cx + 4.5 * SCALE, cy + 1 * SCALE], fill=colour)
 
 
 def draw_status(colour, symbol, size=14):
@@ -200,9 +253,6 @@ def draw_status(colour, symbol, size=14):
 	elif symbol == "cross":
 		draw.line([(s * .32, s * .32), (s * .68, s * .68)], fill="white", width=w)
 		draw.line([(s * .68, s * .32), (s * .32, s * .68)], fill="white", width=w)
-	elif symbol == "arrows":
-		draw.arc([s * .26, s * .26, s * .74, s * .74], 200, 470, fill="white", width=w)
-		draw.polygon([(s * .70, s * .22), (s * .84, s * .46), (s * .56, s * .46)], fill="white")
 	elif symbol == "bang":
 		draw.line([(s * .5, s * .24), (s * .5, s * .56)], fill="white", width=w)
 		draw.ellipse([s * .43, s * .64, s * .57, s * .78], fill="white")
@@ -213,7 +263,15 @@ def draw_status(colour, symbol, size=14):
 	elif symbol == "person":
 		draw.ellipse([s * .38, s * .22, s * .62, s * .46], fill="white")
 		draw.chord([s * .26, s * .50, s * .74, s * .98], 180, 360, fill="white")
-	return image.resize((size, size), Image.LANCZOS)
+	image = image.resize((size, size), Image.LANCZOS)
+
+	# The hourglass is set pixel by pixel, since at 14 pixels a scaled down one blurs into a blob
+	if symbol == "hourglass":
+		for y, row in enumerate(HOURGLASS):
+			for x, pixel in enumerate(row):
+				if pixel == "#":
+					image.putpixel((x, y), (255, 255, 255, 255))
+	return image
 
 
 def draw_tile(colour, kind):
@@ -249,23 +307,24 @@ def make_images():
 	"""Returns the images by file name."""
 
 	return {
-		"chat-panel.png": draw_panel(PANEL_HEIGHT, history=True),
-		"chat-panel-collapsed.png": draw_panel(TITLE_HEIGHT, history=False),
 		"chat-field.png": draw_field(active=False),
 		"chat-field-typing.png": draw_field(active=True),
-		"chat-hide.png": draw_button(24, 20, chevron(up=True)),
-		"chat-show.png": draw_button(24, 20, chevron(up=False)),
-		"chat-send.png": draw_button(32, 26, send_arrow),
-		"chat-minimize.png": draw_button(24, 20, minimize_arrow),
-		"chat-chip.png": draw_button(64, 26, no_icon, radius=13),	# the minimized panel; its icon and text are windows on top
-		"chat-badge.png": draw_badge(),
-		"status-pill.png": draw_pill(),
+		"chat-minimize.png": draw_title_button(minus_bar),
+		"chat-chip.png": draw_round_button(),
+		"chat-count.png": draw_count_bubble(),
+		"chat-hint.png": draw_hint(),
+		"ring-green.png": draw_ring(GREEN),
+		"ring-blue.png": draw_ring(BLUE),
+		"ring-amber.png": draw_ring(AMBER),
+		"ring-red.png": draw_ring(RED),
+		"ring-grey.png": draw_ring(GREY),
+		"status-tip.png": draw_status_tip(),
 		"status-saved.png": draw_status(GREEN, "check"),
-		"status-saving.png": draw_status(BLUE, "arrows"),
+		"status-saving.png": draw_status(BLUE, "hourglass"),
 		"status-failed.png": draw_status(RED, "cross"),
 		"status-not-saved.png": draw_status(AMBER, "bang"),
 		"status-connected.png": draw_status(GREEN, "dot"),
-		"status-disconnected.png": draw_status(GREY, "dash"),
+		"status-disconnected.png": draw_status(AMBER, "dash"),	# amber like a save that can't reach the server
 		"status-guest.png": draw_status(INDIGO, "person"),
 		"tile-you.png": draw_tile(TILE_YOU, "you"),
 		"tile-claimed.png": draw_tile(TILE_CLAIMED, "claimed"),

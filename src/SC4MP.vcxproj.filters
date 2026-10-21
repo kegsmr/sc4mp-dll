@@ -93,6 +93,9 @@
     <ClCompile Include="ChatPanel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="GuardDialog.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\cRZBaseSystemService.cpp">
       <Filter>Source Files\GZCOM</Filter>
     </ClCompile>
@@ -168,6 +171,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ChatPanel.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GuardDialog.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="GZWinInterfaces.h">

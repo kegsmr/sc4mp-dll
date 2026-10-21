@@ -1,6 +1,7 @@
 #include "version.h"
 #include "Bridge.h"
 #include "ChatPanel.h"
+#include "GuardDialog.h"
 #include "Json.h"
 #include "Log.h"
 #include "Text.h"
@@ -110,9 +111,12 @@ public:
 		}
 
 		// The bridge thread only queues the lines; the panel shows them on the game thread
-		bridge.SetNotifyHandler([this](const std::string& text, bool history, const std::string& name, const std::string& color) { chat.Post(text, history, name, color); });
+		bridge.SetNotifyHandler([this](const std::string& text, bool history, const std::string& name, const std::string& color, bool own) { chat.Post(text, history, name, color, own); });
 		bridge.SetStatusHandler([this](const std::string& state, const std::string& text) { chat.PostStatus(state, text); });
 		bridge.SetServerHandler([this](const std::string& name) { chat.PostServerName(name); });
+		bridge.SetGuardHandler([this](const std::string& owner, const std::string& city, const std::string& path) { guard.Post(owner, city, path); });
+		bridge.SetAlertHandler([this](const std::string& title, const std::string& text) { guard.PostAlert(title, text); });
+		bridge.SetClaimHandler([this](bool reset, const std::string& owner, const std::string& city, const std::string& path) { guard.PostClaim(reset, owner, city, path); });
 
 		// In single player, only log what happens
 		if (!bridge.Start())
@@ -127,12 +131,24 @@ public:
 			[this](const std::string& text) { SendChat(text); },
 			[this](const std::string& command) { SendCommand(command); });
 
+		// The city's view, or the region's for alerts that come after leaving the city (eg. a failed save)
+		guard.Start([]()
+		{
+			cIGZWin* pView = GetSC4AppChild(kGZWin_SC4View3DWin);
+			if (pView && pView->IsVisible())
+			{
+				return pView;
+			}
+			return GetSC4AppChild(kGZWin_SC4WinRegionScreen);
+		});
+
 		return true;
 	}
 
 	// The game's windows still exist here, but not after the app shuts down
 	bool PreAppShutdown()
 	{
+		guard.Stop();
 		chat.Stop();
 		return true;
 	}
@@ -161,14 +177,21 @@ public:
 			break;
 		case kSC4MessagePostSave:
 			SendCityEvent("saved", "Saved city");
+
+			// The launcher reports whether the server took the save, so the game's "City Saved." would say so too soon
+			if (bridge.IsConnected())
+			{
+				chat.HideSavedDialog();
+			}
 			break;
 		case kSC4MessagePreCityShutdown:
+			guard.Detach();
 			chat.Detach();
 			SendCityEvent("city_exited", "Exiting city");
 			break;
 		case kSC4MessagePostRegionInit:
 			RegionLoaded();
-			chat.Attach(GetSC4AppChild(kGZWin_SC4WinRegionScreen));
+			chat.Attach(GetSC4AppChild(kGZWin_SC4WinRegionScreen), true);
 			break;
 		case kSC4MessagePreRegionShutdown:
 			chat.Detach();
@@ -201,13 +224,21 @@ private:
 			Log::Line("Loaded city in God Mode: " + name);
 		}
 
+		// The launcher finds the city's tile (and who owns it) from its savegame
+		cRZBaseString path;
+		pCity->GetCitySaveFilePath(path);
+
 		JsonWriter message;
 		message.Add("type", "city_loaded");
 		message.Add("name", name);
 		message.Add("established", established);
+		message.Add("path", Text::ToUtf8(path.ToChar()));
 		bridge.Send(message);
 
-		chat.Attach(GetSC4AppChild(kGZWin_SC4View3DWin));
+		// Before the game's own prompts (eg. to reconcile the edges), if the launcher already said whose city it is
+		guard.CityOpened(Text::ToUtf8(path.ToChar()));
+
+		chat.Attach(GetSC4AppChild(kGZWin_SC4View3DWin), false);
 	}
 
 	// Sends an event about the open city. The current city is read from the app, since not every message carries it.
@@ -402,8 +433,9 @@ private:
 		return Text::ToUtf8(name.ToChar());
 	}
 
-	// Declared first, so it outlives the bridge, which may still be posting to it
+	// Declared first, so they outlive the bridge, which may still be posting to them
 	ChatPanel chat;
+	GuardDialog guard;
 	Bridge bridge;
 };
 
