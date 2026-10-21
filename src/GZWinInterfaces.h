@@ -9,6 +9,7 @@
 // slots 53 to 57 are each one off: its GZWinMoveTo(x, y) calls the game's slot 57, which moves a window by (x, y).
 // ChatPanel::PlaceWindow relies on that. Nothing else in slots 53 to 57 is called.
 
+class cGZMessage;
 class cIGZString;
 class cIGZWin;
 class cIGZWinProc;
@@ -17,17 +18,53 @@ static const uint32_t kGZIID_cIGZWinGen = 0x5386D516;
 static const uint32_t kGZIID_cIGZWinText = 0x212CDC1F;
 static const uint32_t kGZIID_cIGZWinTextEdit = 0x231A1C57;	// only queried, to see if the player is typing in the game's own text box
 
-// The mouse messages a window's proc gets (cGZMessage::dwMessageType), as seen in game on the chat panel. Their dwData1
-// and dwData2 are the point, from the window's top left corner. Only the left button was tried. The two types after each
-// of its own are guessed to be the right and middle buttons' (in some order), which are handled alike.
+// The messages a window's proc gets (cGZMessage::dwMessageType), named as in the game's cGZWinProcSpyMessages::CapturedMessage
+// (from 0xC0000054, https://github.com/kegsmr/sc4mp-dll/issues/9#issuecomment-6308209886)
+static const uint32_t kGZWinMessageChildDelete = 0x01;
+static const uint32_t kGZWinMessageChildRemove = 0x02;
+static const uint32_t kGZWinMessageCommand = 0x03;	// a control's, eg. a button's click: dwData1 is kGZWinCommandButtonClicked and dwData2 the button's ID
+static const uint32_t kGZWinCommandButtonClicked = 0x287259F6;
+
+// The keys go to the window with the game's focus. dwData1 is the key's virtual key code (for Character, it's taken to be the
+// character, like WM_CHAR's), dwData2 the modifier keys (in the game's own flags) and dwData3 the repeat count.
+static const uint32_t kGZWinMessageCharacter = 0x04;
+static const uint32_t kGZWinMessageKeyDown = 0x05;
+static const uint32_t kGZWinMessageKeyUp = 0x06;
+
+// dwData1 and dwData2 are the point, from the window's top left corner, and dwData3 has the modifier keys in its high word
+// and the wheel's turn (in WHEEL_DELTA units, up if positive) in its low word. The game doesn't send the middle button's.
 static const uint32_t kGZWinMessageMouseDownL = 0x07;
 static const uint32_t kGZWinMessageMouseDownR = 0x08;
-static const uint32_t kGZWinMessageMouseDownM = 0x09;
 static const uint32_t kGZWinMessageMouseUpL = 0x0A;
 static const uint32_t kGZWinMessageMouseUpR = 0x0B;
-static const uint32_t kGZWinMessageMouseUpM = 0x0C;
 static const uint32_t kGZWinMessageMouseMove = 0x0D;
-static const uint32_t kGZWinMessageMouseWheel = 0x0E;	// dwData3 is taken to be the turn, in WHEEL_DELTA units, up if positive
+static const uint32_t kGZWinMessageMouseWheel = 0x0E;
+
+static const uint32_t kGZWinMessageDialogEnd = 0x0F;
+static const uint32_t kGZWinMessageKillFocus = 0x10;
+static const uint32_t kGZWinMessageSetFocus = 0x11;
+static const uint32_t kGZWinMessageCaptureChanged = 0x12;
+static const uint32_t kGZWinMessageMouseEnter = 0x13;
+static const uint32_t kGZWinMessageMouseExit = 0x14;
+static const uint32_t kGZWinMessageWinMoving = 0x17;
+static const uint32_t kGZWinMessageWinMoveStart = 0x18;
+static const uint32_t kGZWinMessageWinMoveEnd = 0x19;
+
+// A GZWinGen's own messages to its proc. The names with a "?" in his list are guesses.
+static const uint32_t kGZWinGenMessageBeginPaint = 0xA2BF8ACD;	// ?, dwData1 is the rect to draw
+static const uint32_t kGZWinGenMessagePaint = 0xA2BF8ACE;	// dwData1 is the rect to draw
+static const uint32_t kGZWinGenMessageEndPaint = 0xA2BF8ACF;	// ?, dwData1 is the rect to draw
+static const uint32_t kGZWinGenMessageInit = 0xA2BF8AD0;	// sent before a scripted window's proc can be set, so it never gets it
+static const uint32_t kGZWinGenMessageShutdown = 0xA2BF8AD1;
+static const uint32_t kGZWinGenMessageAdjustUserRect = 0xA2BF8AD2;	// ?, dwData1 is the adjusted rect and dwData2 the user area
+static const uint32_t kGZWinGenMessageLayout = 0xA2BF8AD3;	// ?, dwData1 is the user area and dwData2 the window's bounds
+static const uint32_t kGZWinGenMessagePointInWindow = 0xA2BF8AD4;	// dwData1 is the point (x in the high word), dwData2 a pointer to a bool to set
+static const uint32_t kGZWinGenMessageAttach = 0xA2BF8AD5;	// the proc was set
+static const uint32_t kGZWinGenMessageDetach = 0xA2BF8AD6;	// the proc was cleared
+static const uint32_t kGZWinGenMessagePostAttach = 0xA2BF8AD8;	// ?, after Attach
+
+// The cIGZWin flag (GetFlag, SetFlag) that lets a window take the game's focus, as the current gzcom-dll's cIGZWin.h has it
+static const uint32_t kGZWinFlagAcceptFocus = 0x8000;
 
 // A window that holds other windows, eg. a dialog
 class cIGZWinGen : public cIGZUnknown
@@ -40,6 +77,16 @@ public:
 
 	// The window proc gets the messages from the window's children, eg. button clicks
 	virtual cIGZWinGen* SetWinProc(cIGZWinProc* proc) = 0;
+};
+
+static const uint32_t kGZIID_cIGZWinMessageFilter = 0xC6AE7085;
+
+// What cIGZWinMgr::GZRegisterKeyFilter takes, as in the current gzcom-dll's cIGZWinMessageFilter.h. It's taken to see the
+// keyboard's messages before the window with the focus does, and to keep a message from it by returning true.
+class cIGZWinMessageFilter : public cIGZUnknown
+{
+public:
+	virtual bool DoMessage(cIGZWin* pWin, cGZMessage& message) = 0;
 };
 
 // A text label
