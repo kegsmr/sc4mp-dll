@@ -405,8 +405,7 @@ void ChatPanel::Attach(cIGZWin* pNewParent, bool region)
 
 void ChatPanel::Detach()
 {
-	typing = false;
-	input.clear();
+	typing = false;	// the unsent text is kept, and shown in the next view's panel
 	StopDragging();
 	ReleaseFocus();
 
