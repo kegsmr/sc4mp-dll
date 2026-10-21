@@ -28,8 +28,9 @@ public:
 	bool IsEnabled() const;
 
 	// Called on the bridge thread with each line the launcher sends to show in game (chat, save results and alerts).
-	// `history` is true for the recent lines the launcher sends when the game connects. Set it before Start().
-	using NotifyHandler = std::function<void(const std::string& text, bool history)>;
+	// `history` is true for the recent lines the launcher sends when the game connects. Chat comes with the player's `name`
+	// and the launcher's `color` for it (eg. "[46,125,50]"), which are empty for other lines. Set it before Start().
+	using NotifyHandler = std::function<void(const std::string& text, bool history, const std::string& name, const std::string& color)>;
 	void SetNotifyHandler(NotifyHandler handler);
 
 	// Called on the bridge thread with the launcher's save status (eg. "saved", "Saved 13:01") and the server's name. Set them before Start().
