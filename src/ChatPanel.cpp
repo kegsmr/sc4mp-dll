@@ -760,8 +760,7 @@ bool ChatPanel::DoMessage(cIGZWin* pSender, cGZMessage& filtered)
 
 	if (GameWantsEnter())
 	{
-		Log::Line("Enter was left to the game, since one of its dialogs or text boxes has it, or the player is driving");
-		return false;
+		return false;	// one of the game's dialogs or text boxes has it, or the player is driving
 	}
 
 	StartTyping();
