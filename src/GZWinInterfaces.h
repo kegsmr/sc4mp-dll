@@ -20,7 +20,7 @@ static const uint32_t kGZIID_cIGZWinTextEdit = 0x231A1C57;	// only queried, to s
 
 // The messages a window's proc gets (cGZMessage::dwMessageType) that the DLL uses, named as in the game's
 // cGZWinProcSpyMessages::CapturedMessage (from 0xC0000054, which lists the rest too,
-// https://github.com/kegsmr/sc4mp-dll/issues/9#issuecomment-6308209886)
+// https://github.com/sc4multiplayer/sc4mp-dll/issues/9#issuecomment-6308209886)
 static const uint32_t kGZWinMessageCommand = 0x03;	// a control's, eg. a button's click: dwData1 is kGZWinCommandButtonClicked and dwData2 the button's ID
 static const uint32_t kGZWinCommandButtonClicked = 0x287259F6;
 

@@ -1,5 +1,5 @@
 # SC4MP DLL
-A plugin for the PC videogame [SimCity 4](https://en.wikipedia.org/wiki/SimCity_4) that brings multiplayer chat and save status into the game. Uses C++ and the game's GZCOM interfaces through [gzcom-dll](https://github.com/nsgomez/gzcom-dll). Built to work with the [SC4MP Client](https://github.com/kegsmr/sc4mp-client) and [SC4MP Server](https://github.com/kegsmr/sc4mp-server).
+A plugin for the PC videogame [SimCity 4](https://en.wikipedia.org/wiki/SimCity_4) that brings multiplayer chat and save status into the game. Uses C++ and the game's GZCOM interfaces through [gzcom-dll](https://github.com/nsgomez/gzcom-dll). Built to work with the [SC4MP Client](https://github.com/sc4multiplayer/sc4mp-client) and [SC4MP Server](https://github.com/sc4multiplayer/sc4mp-server).
 
 # Installation
 The DLL comes with the SC4MP Launcher, which copies `sc4mp.dll` and `sc4mp-dll-ui.dat` into the game's `Plugins` folder when it starts SimCity 4. To install a build by hand, put both files in the top of the `Plugins` folder (DLL plugins don't load from subfolders). It works on Windows 7 SP1 and newer.
