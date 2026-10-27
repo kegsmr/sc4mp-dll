@@ -118,6 +118,11 @@ void Bridge::SetTakeoverHandler(TakeoverHandler handler)
 	takeoverHandler = std::move(handler);
 }
 
+void Bridge::SetLostHandler(LostHandler handler)
+{
+	lostHandler = std::move(handler);
+}
+
 void Bridge::Send(JsonWriter message)
 {
 	if (!IsEnabled())
@@ -147,6 +152,8 @@ void Bridge::Run()
 	Log::Line("Connecting to the launcher on port " + std::to_string(port));
 
 	bool failedBefore = false;
+	bool wasConnected = false;	// the launcher was connected before, so not reaching it means it closed
+	bool lostReported = false;
 
 	while (!stopping)
 	{
@@ -167,6 +174,8 @@ void Bridge::Run()
 		{
 			Log::Line("Connected to the launcher");
 			failedBefore = false;
+			wasConnected = true;
+			lostReported = false;
 
 			// Send events right away instead of batching them
 			BOOL noDelay = TRUE;
@@ -178,11 +187,24 @@ void Bridge::Run()
 
 			Log::Line("Disconnected from the launcher");
 		}
-		else if (!failedBefore)
+		else
 		{
-			// Only once, so the log isn't flooded while the launcher is gone
-			Log::Line("Unable to connect to the launcher, retrying every few seconds");
-			failedBefore = true;
+			if (!failedBefore)
+			{
+				// Only once, so the log isn't flooded while the launcher is gone
+				Log::Line("Unable to connect to the launcher, retrying every few seconds");
+				failedBefore = true;
+			}
+
+			// Only after a reconnect fails, so a dropped connection the launcher takes back right away doesn't warn
+			if (wasConnected && !lostReported)
+			{
+				lostReported = true;
+				if (lostHandler)
+				{
+					lostHandler();
+				}
+			}
 		}
 
 		closesocket(s);
