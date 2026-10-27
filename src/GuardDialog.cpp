@@ -34,8 +34,9 @@ static constexpr uint32_t kSignID = 0x7B3E9ACA;
 static constexpr uint32_t kBackButtonID = 0x7B3E9AC7;
 static constexpr uint32_t kStayButtonID = 0x7B3E9AC9;
 
-// "<city> belongs to <owner>." wraps onto as many of these lines as it needs, and the windows below it move down
-static constexpr uint32_t kOwnerLineIDs[] = { 0x7B3E9AC4, 0x7B3E9AD0, 0x7B3E9AD1, 0x7B3E9AD2, 0x7B3E9AD3, 0x7B3E9AD4 };
+// "<city> belongs to <owner>." wraps onto as many of these lines as it needs, and the windows below it move down. The
+// alert dialog has all of them; the warning only has the first six.
+static constexpr uint32_t kOwnerLineIDs[] = { 0x7B3E9AC4, 0x7B3E9AD0, 0x7B3E9AD1, 0x7B3E9AD2, 0x7B3E9AD3, 0x7B3E9AD4, 0x7B3E9AD5, 0x7B3E9AD6, 0x7B3E9AD7, 0x7B3E9AD8 };
 static constexpr uint32_t kBelowOwnerIDs[] = { 0x7B3E9AC5, 0x7B3E9AC6, kBackButtonID, kStayButtonID };
 static constexpr int32_t kLineWidth = 284;	// the owner lines' text windows (in GenBodyMedium), less their gutters
 static constexpr int32_t kLineHeight = 18;
@@ -668,13 +669,34 @@ void GuardDialog::ShowOwner(const std::string& text)
 		{
 			end = wide.size();
 		}
-		for (const std::wstring& line : WrapToWidth(wide.substr(start, end - start), kLineWidth))
+		std::wstring paragraph = wide.substr(start, end - start);
+
+		// A blank line (between an alert's paragraphs) is kept
+		if (paragraph.empty())
+		{
+			lines.push_back(L"");
+		}
+
+		for (const std::wstring& line : WrapToWidth(paragraph, kLineWidth))
 		{
 			lines.push_back(line);
 		}
 		start = end + 1;
 	}
-	size_t count = std::size(kOwnerLineIDs);
+
+	// As many lines as this dialog has
+	size_t count = 0;
+	for (uint32_t id : kOwnerLineIDs)
+	{
+		if (pWin->GetChildWindowFromID(id))
+		{
+			count++;
+		}
+	}
+	if (count == 0)
+	{
+		return;
+	}
 
 	// Six lines take any city name the game allows, but just in case, the rest goes on the last line
 	while (lines.size() > count)
