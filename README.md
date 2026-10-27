@@ -17,7 +17,7 @@ Join a server with the SC4MP Launcher. In game:
 What happens is logged to `SC4MP.log` next to the DLL.
 
 # Compiling
-Clone with `git clone --recurse-submodules` (or run `git submodule update --init`) to get [gzcom-dll](https://github.com/nsgomez/gzcom-dll) in `vendor/gzcom-dll`. Then build `src/SC4MP.sln` in Visual Studio (Release, x86). Every push is also built by GitHub Actions, which checks the DLL still loads on Windows 7 and uploads `sc4mp.dll` and `sc4mp-dll-ui.dat` as an artifact.
+Clone with `git clone --recurse-submodules` (or run `git submodule update --init`) to get [gzcom-dll](https://github.com/nsgomez/gzcom-dll) in `vendor/gzcom-dll`. Then build `src/SC4MP.sln` in Visual Studio (Release, x86). Every merge into `main` is built by GitHub Actions, which checks the DLL still loads on Windows 7, and published as the next release (R1, R2, ...) with `sc4mp.dll` and `sc4mp-dll-ui.dat`. Other branches can be built with "Run workflow" on the Build workflow.
 
 The panel and dialogs are SimCity 4 windows made by the game from the UI scripts in `ui`, so `sc4mp-dll-ui.dat` must go in `Plugins` with the DLL. To build it, run:
 
