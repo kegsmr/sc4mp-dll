@@ -120,6 +120,18 @@ public:
 		bridge.SetClaimHandler([this](bool reset, const std::string& owner, const std::string& city, const std::string& path) { guard.PostClaim(reset, owner, city, path); });
 		bridge.SetTakeoverHandler([this](const std::string& path, const std::string& mayor) { guard.PostTakeover(path, mayor); });
 
+		// Without the launcher, saves don't reach the server, so say so in the panel's status, in chat and in an alert. The launcher
+		// sends its status again if it connects again.
+		bridge.SetLostHandler([this]()
+		{
+			chat.PostStatus("disconnected", "Launcher closed");
+			chat.Post("The SC4MP Launcher closed, so your saves won't reach the server.", false, std::string(), "[206,52,52]");
+			guard.PostAlert(
+				"Launcher closed",
+				"The SC4MP Launcher has closed, so your city can no longer be saved to the server.\n\n"
+				"To keep playing, exit SimCity 4 and rejoin the server from the launcher.");
+		});
+
 		// In single player, only log what happens
 		if (!bridge.Start())
 		{

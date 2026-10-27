@@ -62,6 +62,11 @@ public:
 	using TakeoverHandler = std::function<void(const std::string& path, const std::string& mayor)>;
 	void SetTakeoverHandler(TakeoverHandler handler);
 
+	// Called on the bridge thread when the launcher can't be reached after it was connected (eg. it was closed), once until it
+	// connects again. Set it before Start().
+	using LostHandler = std::function<void()>;
+	void SetLostHandler(LostHandler handler);
+
 	// Queues a message for the launcher, adding the current time. Messages wait in the queue
 	// while the launcher isn't connected.
 	void Send(JsonWriter message);
@@ -90,6 +95,7 @@ private:
 	ClaimHandler claimHandler;
 	TakeoverHandler takeoverHandler;
 	AlertHandler alertHandler;
+	LostHandler lostHandler;
 
 	std::mutex mutex;
 	std::condition_variable stopped;

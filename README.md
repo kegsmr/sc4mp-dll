@@ -12,6 +12,7 @@ Join a server with the SC4MP Launcher. In game:
 - The panel can be dragged by its title bar and resized by its bottom corners. The mouse wheel, the scrollbar and Page Up/Down scroll back through the last 200 lines.
 - Opening a city that belongs to another mayor shows a warning, since your saves there won't be kept, with "Back to region" and "Look around". The launcher's alerts (eg. a failed save) are shown in the same kind of dialog.
 - When you take over a city, its mayor name is set to yours, and saved with your next save.
+- If the launcher closes while you play, the panel's status and an alert say so, since your saves can't reach the server without it.
 - The panel and dialogs hide with the game's UI.
 
 What happens is logged to `SC4MP.log` next to the DLL.
