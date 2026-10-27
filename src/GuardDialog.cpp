@@ -41,6 +41,7 @@ static constexpr int32_t kLineWidth = 284;	// the owner lines' text windows (in 
 static constexpr int32_t kLineHeight = 18;
 static constexpr ULONGLONG kPromptWait = 2000;	// a dialog of the game's this soon after the city opens (eg. to reconcile the edges) is answered first
 static constexpr int32_t kTitleBandHeight = 34;	// the frame's title band, by which the warning is dragged
+static constexpr ULONGLONG kUICheckInterval = 250;	// how often it checks whether the game's UI is hidden, like the chat panel
 static constexpr size_t kMaxAlerts = 3;	// a few failures in a row are shown one after another, not piled up
 
 // Splits text into lines that fit `width` pixels, breaking at spaces, and inside a word only if it's longer than a line
@@ -347,7 +348,7 @@ bool GuardDialog::OnTick(uint32_t unknown1)
 		pWin->HideWindow();
 	}
 	// Hidden with the game's UI (eg. for a screenshot), like the chat panel
-	if (pWin && GetTickCount64() - lastUICheck >= 250)
+	if (pWin && GetTickCount64() - lastUICheck >= kUICheckInterval)
 	{
 		lastUICheck = GetTickCount64();
 		bool hidden = ChatPanel::IsGameUIHidden();
