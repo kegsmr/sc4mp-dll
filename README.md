@@ -7,7 +7,7 @@ The DLL comes with the SC4MP Launcher, which copies `sc4mp.dll` and `sc4mp-dll-u
 # Usage
 Join a server with the SC4MP Launcher. In game:
 - A chat panel shows the server's chat in the city and region views. Press Enter (or click the text field) to type, Enter to send, and Esc to go back to the game. A message starting with `/` runs a launcher command, eg. `/status`. The `say <message>` and `sc4mp <command>` cheat codes work too.
-- The title bar shows the server's name and the save status (hover the icon for it). While saving, the chat's last line shows how much of the city has been sent, and the result is shown in green or red. The game's "City Saved." message is hidden, since the launcher reports whether the server took the save.
+- The title bar shows the server's name and the save status (hover the icon for it). While saving, the chat's last line shows how much of the city has been sent, and the result is shown in green or red.
 - The arrow minimizes the panel to a round button with a globe on it, in the top right corner in the city view and the bottom right in the region view. Its ring shows the save status and its red bubble counts new messages. It moves out of the way of the game's own windows.
 - The panel can be dragged by its title bar and resized by its bottom corners. The mouse wheel, the scrollbar and Page Up/Down scroll back through the last 200 lines.
 - Opening a city that belongs to another mayor shows a warning, since your saves there won't be kept, with "Back to region" and "Look around". The launcher's alerts (eg. a failed save) are shown in the same kind of dialog.
