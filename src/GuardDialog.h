@@ -83,7 +83,7 @@ private:
 	void StartDragging(int32_t x, int32_t y);
 	void Drag(int32_t x, int32_t y);
 	void StopDragging();
-	void ShowOwner(const std::string& text);
+	void ShowOwner(const std::string& text, int32_t spare = 0);
 	void SetText(uint32_t id, const std::string& text);
 
 	static bool IsOpenCity(const std::string& path);

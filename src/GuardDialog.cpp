@@ -40,6 +40,7 @@ static constexpr uint32_t kOwnerLineIDs[] = { 0x7B3E9AC4, 0x7B3E9AD0, 0x7B3E9AD1
 static constexpr uint32_t kBelowOwnerIDs[] = { 0x7B3E9AC5, 0x7B3E9AC6, kBackButtonID, kStayButtonID };
 static constexpr int32_t kLineWidth = 284;	// the owner lines' text windows (in GenBodyMedium), less their gutters
 static constexpr int32_t kLineHeight = 18;
+static constexpr int32_t kAlertSpare = 35;	// the space the alert has below its first line (beside its sign), which its next lines use before it grows
 static constexpr ULONGLONG kPromptWait = 2000;	// a dialog of the game's this soon after the city opens (eg. to reconcile the edges) is answered first
 static constexpr int32_t kTitleBandHeight = 34;	// the frame's title band, by which the warning is dragged
 static constexpr ULONGLONG kUICheckInterval = 250;	// how often it checks whether the game's UI is hidden, like the chat panel
@@ -472,7 +473,7 @@ void GuardDialog::Show(const Warning& warning)
 	if (warning.alert)
 	{
 		SetText(kTitleID, warning.title);
-		ShowOwner(warning.text);
+		ShowOwner(warning.text, kAlertSpare);
 	}
 	else
 	{
@@ -654,9 +655,9 @@ void GuardDialog::StopDragging()
 }
 
 // Shows the text (the warning's "<city> belongs to <owner>.", or an alert's) in full, on as many lines as it needs, and
-// grows the dialog to fit. Names are never shortened: the game allows long city names (up to 128 characters), and the
-// line is the player's only way to tell which city it is.
-void GuardDialog::ShowOwner(const std::string& text)
+// grows the dialog to fit, once the lines have used the `spare` space below the first one. Names are never shortened: the
+// game allows long city names (up to 128 characters), and the line is the player's only way to tell which city it is.
+void GuardDialog::ShowOwner(const std::string& text, int32_t spare)
 {
 	// Each of its own lines (an alert can have a few) is wrapped to fit
 	std::vector<std::wstring> lines;
@@ -731,7 +732,11 @@ void GuardDialog::ShowOwner(const std::string& text)
 
 	// The pinned gzcom-dll's GZWinMoveTo moves a window by an offset (see GZWinInterfaces.h). The frame is an edge
 	// image, so its inset grows with the dialog.
-	int32_t grow = static_cast<int32_t>(lines.size() - 1) * kLineHeight;
+	int32_t grow = static_cast<int32_t>(lines.size() - 1) * kLineHeight - spare;
+	if (grow <= 0)
+	{
+		return;
+	}
 	for (uint32_t id : kBelowOwnerIDs)
 	{
 		cIGZWin* pBelow = pWin->GetChildWindowFromID(id);
