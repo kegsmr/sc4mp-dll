@@ -254,9 +254,17 @@ private:
 	{
 		cISC4AppPtr pApp;
 		std::string name;
+		std::string path;	// the city's savegame, so the launcher pushes only the city that was saved, not the neighbours the game rewrites
 		if (pApp)
 		{
-			name = GetCityName(pApp->GetCity());
+			cISC4City* pCity = pApp->GetCity();
+			name = GetCityName(pCity);
+			if (pCity)
+			{
+				cRZBaseString savePath;
+				pCity->GetCitySaveFilePath(savePath);
+				path = Text::ToUtf8(savePath.ToChar());
+			}
 		}
 
 		Log::Line(std::string(logText) + ": " + name);
@@ -264,6 +272,7 @@ private:
 		JsonWriter message;
 		message.Add("type", type);
 		message.Add("name", name);
+		message.Add("path", path);
 		bridge.Send(message);
 	}
 
