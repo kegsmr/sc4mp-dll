@@ -26,7 +26,7 @@ class cIGZWin;
 // The mouse comes to the panel's window proc (DoWinProcMessage) from the game, which keeps what the panel handles from
 // the map under it. So do the keys while the player types, since the panel has the game's focus then. Enter, which opens
 // the chat, is seen first by the game's key filter (DoMessage). The game window's own Win32 messages (FilterMessage) are
-// only watched for the game's "City Saved." message box. All of these run on the game thread.
+// only watched to know the game's window. All of these run on the game thread.
 class ChatPanel final : public cRZBaseSystemService, private cIGZWinProc, private cIGZWinMessageFilter, private cIGZWinProcFilterW32
 {
 public:
@@ -49,10 +49,6 @@ public:
 	// Chat comes with the player's name, which starts the text, and the launcher's color for it (eg. "[46,125,50]"). Other lines are shown in grey,
 	// or in green or red if the launcher gives them a color (save results).
 	void Post(const std::string& text, bool history, const std::string& name = std::string(), const std::string& color = std::string(), bool own = false);
-
-	// Closes the game's "City Saved." message box if it shows within a few seconds, since a city isn't really saved
-	// until the server takes it, which the panel's status shows. Called after the game saves.
-	void HideSavedDialog();
 
 	// Whether the player hid the city view's UI, which the panel and the claimed city warning hide with
 	static bool IsGameUIHidden();
@@ -84,10 +80,8 @@ private:
 	void Wheel(const cGZMessage& msg);
 	uint32_t GetButtonAt(int32_t x, int32_t y) const;
 	bool IsOnChild(uint32_t id, int32_t x, int32_t y) const;
-	void CheckSavedDialog(bool fromMessage);
 	void ResetCaret();
 	void FollowGameUI();
-	void CloseSavedDialog();
 	void StartDragging(int32_t x, int32_t y);
 	void Drag(int32_t x, int32_t y);
 	void StopDragging();
@@ -200,8 +194,6 @@ private:
 	int32_t resizeWidth = 0;
 	int32_t resizeHeight = 0;
 	size_t resizeLineCount = 0;
-	ULONGLONG savedDialogDeadline = 0;	// until when the game's "City Saved." is looked for, after a save
-	ULONGLONG lastSavedDialogCheck = 0;
 	HWND gameWindow = nullptr;	// the game's window, from the messages it gets
 
 	std::mutex inboxMutex;
